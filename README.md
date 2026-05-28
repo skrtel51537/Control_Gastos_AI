@@ -1,20 +1,51 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Dashboard Gastos
 
-# Run and deploy your AI Studio app
+Aplicación de escritorio (Electron + React) para visualizar y analizar gastos
+mensuales a partir de un fichero Excel. De uso personal y completamente local:
+los datos financieros **se quedan en tu equipo** y no se envían a ningún servidor.
 
-This contains everything you need to run your app locally.
+## Funcionalidades
 
-View your app in AI Studio: https://ai.studio/apps/drive/1GxlTz2MIxxCQj1sHyT37Zgv2a6Th9LLb
+- Carga de un Excel de gastos (con plantilla de ejemplo descargable desde la app).
+- Resumen global: ingresos, gastos, ahorro y tasa de ahorro.
+- Análisis mensual con desglose interactivo por categoría y subcategoría.
+- Desglose por categorías y evolución de tendencias.
+- Alertas de meses con gasto elevado (umbral configurable).
+- Filtro por año.
 
-## Run Locally
+## Requisitos
 
-**Prerequisites:**  Node.js
+- [Node.js](https://nodejs.org/) (versión 18 o superior).
 
+## Desarrollo
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```bash
+npm install        # Instalar dependencias
+npm run electron:dev   # App de escritorio en modo desarrollo (recarga en caliente)
+```
+
+`npm run dev` levanta solo la web en el navegador (sin las funciones de Electron).
+
+## Compilar el instalador (Windows)
+
+```bash
+npm run electron:build:win
+```
+
+El instalador se genera en la carpeta `dist-electron/`.
+
+## Seguridad de dependencias
+
+Antes de publicar una versión nueva, revisar vulnerabilidades de dependencias:
+
+```bash
+npm audit
+```
+
+## Formato del Excel
+
+- Celda **B1**: fecha del mes (ej. `Noviembre 2025`).
+- Celda **B4**: ingresos del mes.
+- A partir de la **fila 5**: columna **F** importe, **G** categoría, **H** subcategoría.
+
+Descarga la plantilla desde la propia aplicación para ver un ejemplo.

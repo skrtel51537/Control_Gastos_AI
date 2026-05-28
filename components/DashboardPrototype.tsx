@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell, Legend, LabelList, ReferenceLine
 } from 'recharts';
 import { DashboardData, MonthlySummary, Transaction } from '../types';
-import { processExcelFile } from '../utils/excelParser';
+import { processExcelFile, downloadSampleExcel } from '../utils/excelParser';
 
 const COLORS = ['#6366f1', '#ec4899', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#64748b'];
 // Distinct palette for drill-down view to differentiate from main category view
@@ -1033,6 +1033,17 @@ const UploadView = ({ isLoading, error, onUpload }: any) => (
         </label>
         
         {isLoading && <p className="text-center text-indigo-400 animate-pulse text-sm">Procesando datos...</p>}
+
+        <div className="pt-2 text-center">
+          <p className="text-xs text-slate-500 mb-2">¿No sabes qué formato usar?</p>
+          <button
+            type="button"
+            onClick={downloadSampleExcel}
+            className="text-sm text-indigo-400 hover:text-indigo-300 font-medium underline-offset-4 hover:underline transition-colors"
+          >
+            Descargar plantilla de ejemplo
+          </button>
+        </div>
       </div>
     </div>
   </div>

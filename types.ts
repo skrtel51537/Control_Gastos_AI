@@ -1,20 +1,3 @@
-import React from 'react';
-
-export interface SuggestionCard {
-  id: string;
-  title: string;
-  category: 'UI/UX' | 'Arquitectura' | 'Funcionalidad' | 'AI Integration';
-  description: string;
-  icon: React.ReactNode;
-  details: string[];
-  impact: 'Alto' | 'Medio' | 'Bajo';
-}
-
-export enum ViewMode {
-  Grid = 'GRID',
-  List = 'LIST'
-}
-
 // --- Data Types for Finance Logic ---
 
 export interface Transaction {
