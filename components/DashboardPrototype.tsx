@@ -17,7 +17,11 @@ import {
   detectAnomalies,
   comparePeriods,
   projectYear,
+  expenseByCategory,
 } from '../utils/finance';
+
+const pctChange = (current: number, previous: number): number | null =>
+  previous !== 0 ? ((current - previous) / Math.abs(previous)) * 100 : null;
 
 const DATA_KEY = 'finance_data_v3';
 const SETTINGS_KEY = 'finance_settings_v1';
@@ -27,7 +31,7 @@ const COLORS = ['#6366f1', '#ec4899', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b'
 const COLORS_DRILLDOWN = ['#3b82f6', '#14b8a6', '#f97316', '#a855f7', '#f43f5e', '#84cc16', '#eab308', '#64748b'];
 const COLORS_LIGHT = ['#818cf8', '#f472b6', '#a78bfa', '#22d3ee', '#34d399', '#fbbf24', '#f87171', '#94a3b8'];
 
-type Tab = 'RESUMEN' | 'MENSUAL' | 'CATEGORIAS' | 'TENDENCIAS' | 'OBJETIVOS';
+type Tab = 'RESUMEN' | 'MENSUAL' | 'CATEGORIAS' | 'TENDENCIAS' | 'COMPARAR' | 'OBJETIVOS';
 
 const hydrateData = (parsed: any): DashboardData => {
   if (parsed?.monthlyData) {
@@ -146,6 +150,7 @@ export const DashboardPrototype: React.FC = () => {
             {activeTab === 'MENSUAL' && <MonthlyTab data={filteredData} settings={settings} />}
             {activeTab === 'CATEGORIAS' && <CategoriesTab data={filteredData} />}
             {activeTab === 'TENDENCIAS' && <TrendsTab data={filteredData} />}
+            {activeTab === 'COMPARAR' && <ComparatorTab data={rawData!} />}
             {activeTab === 'OBJETIVOS' && <GoalsTab data={filteredData} settings={settings} onChange={updateSettings} />}
           </div>
         </div>
@@ -168,6 +173,7 @@ const Sidebar = ({ activeTab, onTabChange, onClear }: { activeTab: Tab, onTabCha
         { id: 'MENSUAL', label: 'Análisis Mensual', icon: '📅' },
         { id: 'CATEGORIAS', label: 'Desglose Categorías', icon: '🏷️' },
         { id: 'TENDENCIAS', label: 'Tendencias', icon: '📈' },
+        { id: 'COMPARAR', label: 'Comparador', icon: '⚖️' },
         { id: 'OBJETIVOS', label: 'Objetivos y Presupuestos', icon: '🎯' }
       ].map((item) => (
         <button key={item.id} onClick={() => onTabChange(item.id as Tab)}
@@ -278,19 +284,19 @@ const OverviewTab = ({ data, selectedYear }: { data: DashboardData, selectedYear
           <div className="space-y-2">
             <div className="flex justify-between items-center text-emerald-400">
                <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-400"></div>Ingresos:</span> 
-               <span className="font-mono font-bold">€{Math.round(d.Ingresos).toLocaleString()}</span>
+               <span className="font-mono font-bold">{formatEuro(d.Ingresos)}</span>
             </div>
             <div className="flex justify-between items-center text-rose-400">
                <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-rose-400"></div>Gastos:</span> 
-               <span className="font-mono font-bold">€{Math.round(d.Gastos).toLocaleString()}</span>
+               <span className="font-mono font-bold">{formatEuro(d.Gastos)}</span>
             </div>
              <div className="flex justify-between items-center text-indigo-400">
                <span className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-indigo-400"></div>Ahorro Total:</span> 
-               <span className="font-mono font-bold">€{Math.round(d.Balance).toLocaleString()}</span>
+               <span className="font-mono font-bold">{formatEuro(d.Balance)}</span>
             </div>
             <div className="flex justify-between items-center text-slate-400 pt-2 mt-1 border-t border-slate-800">
                <span>Tasa Ahorro:</span> 
-               <span className="font-mono font-bold">{Math.round(d.AhorroPct)}%</span>
+               <span className="font-mono font-bold">{formatPercent(d.AhorroPct)}</span>
             </div>
           </div>
         </div>
@@ -387,7 +393,7 @@ const OverviewTab = ({ data, selectedYear }: { data: DashboardData, selectedYear
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#f8fafc' }} 
                   itemStyle={{ color: '#f8fafc' }} 
-                  formatter={(val: number) => `€${Math.round(val).toLocaleString()}`} 
+                  formatter={(val: number) => formatEuro(val)} 
                 />
                 <Area type="monotone" dataKey="Acumulado" stroke="#6366f1" fill="url(#colSav)" strokeWidth={3} isAnimationActive={false} />
               </AreaChart>
@@ -447,7 +453,7 @@ const OverviewTab = ({ data, selectedYear }: { data: DashboardData, selectedYear
                             {Math.round(ratio)}%
                           </span>
                         </td>
-                        <td className="py-3 px-1 text-right text-slate-400">€{Math.round(m.balance).toLocaleString()}</td>
+                        <td className="py-3 px-1 text-right text-slate-400">{formatEuro(m.balance)}</td>
                       </tr>
                     );
                   })}
@@ -806,7 +812,7 @@ const MonthlyTab = ({ data, settings }: { data: DashboardData, settings: Finance
                  <Tooltip 
                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }} 
                     itemStyle={{ color: '#f8fafc' }}
-                    formatter={(val: number) => `€${Math.round(val).toLocaleString()}`}
+                    formatter={(val: number) => formatEuro(val)}
                  />
                  <Legend wrapperStyle={{fontSize: '12px'}} />
                </PieChart>
@@ -831,12 +837,12 @@ const MonthlyTab = ({ data, settings }: { data: DashboardData, settings: Finance
                    <React.Fragment key={cat1}>
                      <tr className="bg-slate-800/30">
                        <td className="py-2 px-3 font-bold text-xs uppercase tracking-wider" style={{ color: catColor }}>{cat1}</td>
-                       <td className="py-2 px-3 font-bold text-xs uppercase tracking-wider text-right" style={{ color: catColor }}>{Math.round(totalCat).toLocaleString()} €</td>
+                       <td className="py-2 px-3 font-bold text-xs uppercase tracking-wider text-right" style={{ color: catColor }}>{formatEuro(totalCat)}</td>
                      </tr>
                      {groupedAggregatedData[cat1].map((item, idx) => (
                        <tr key={`${cat1}-${idx}`} className="group hover:bg-slate-800/50">
                          <td className="py-3 px-3 text-slate-300 pl-6">{item.subcategory}</td>
-                         <td className="py-3 px-3 text-right text-slate-200">{Math.round(item.amount).toLocaleString()} €</td>
+                         <td className="py-3 px-3 text-right text-slate-200">{formatEuro(item.amount)}</td>
                        </tr>
                      ))}
                    </React.Fragment>
@@ -928,7 +934,7 @@ const CategoriesTab = ({ data }: { data: DashboardData }) => {
                  <Tooltip 
                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }} 
                     itemStyle={{ color: '#f8fafc' }}
-                    formatter={(val: number) => `€${Math.round(val).toLocaleString()}`}
+                    formatter={(val: number) => formatEuro(val)}
                  />
                  <Legend wrapperStyle={{fontSize: '11px'}} />
                </PieChart>
@@ -967,7 +973,7 @@ const CategoriesTab = ({ data }: { data: DashboardData }) => {
                 </div>
                 <div className="text-right">
                    <p className="text-xs text-slate-400 font-bold uppercase">Total</p>
-                   <p className="text-2xl font-bold text-white">€{Math.round(totalSelectedCategory).toLocaleString()}</p>
+                   <p className="text-2xl font-bold text-white">{formatEuro(totalSelectedCategory)}</p>
                 </div>
              </div>
              
@@ -980,13 +986,13 @@ const CategoriesTab = ({ data }: { data: DashboardData }) => {
                     cursor={{fill: '#334155', opacity: 0.2}}
                     contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#f8fafc' }} 
                     itemStyle={{ color: '#f8fafc' }}
-                    formatter={(val: number) => `€${Math.round(val).toLocaleString()}`}
+                    formatter={(val: number) => formatEuro(val)}
                  />
                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                    {categoryData.map((entry, index) => (
                      <Cell key={`cell-${index}`} fill={entry.color} />
                    ))}
-                   <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={12} formatter={(val: number) => `€${Math.round(val).toLocaleString()}`} />
+                   <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={12} formatter={(val: number) => formatEuro(val)} />
                  </Bar>
                </BarChart>
              </ResponsiveContainer>
@@ -1116,7 +1122,7 @@ const TrendsTab = ({ data }: { data: DashboardData }) => {
             <div>
                 <h3 className="text-lg font-semibold text-white">Evolución: <span style={{ color: activeColor }}>{currentLabel}</span></h3>
                 <p className="text-sm text-slate-500">
-                    Gasto Promedio: <span className="text-red-400 font-bold">€{Math.round(average).toLocaleString()}</span> / mes
+                    Gasto Promedio: <span className="text-red-400 font-bold">{formatEuro(average)}</span> / mes
                 </p>
             </div>
          </div>
@@ -1129,7 +1135,7 @@ const TrendsTab = ({ data }: { data: DashboardData }) => {
              <Tooltip 
                 contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#f8fafc' }} 
                 itemStyle={{ color: '#f8fafc' }}
-                formatter={(val: number) => [`€${val.toLocaleString()}`, currentLabel]}
+                formatter={(val: number) => [formatEuro(val), currentLabel]}
              />
              <Legend />
              {/* Single Line based on selection */}
@@ -1370,6 +1376,158 @@ const GoalsTab = ({ data, settings, onChange }: { data: DashboardData, settings:
             <KPIBox label="Gasto anual estimado" value={projection.projectedAnnualExpense} isCurrency negative />
           </div>
         </div>
+      )}
+    </div>
+  );
+};
+
+interface PeriodAggregate {
+  label: string;
+  income: number;
+  expense: number;
+  balance: number;
+  savingsRate: number;
+  byCategory: Record<string, number>;
+}
+
+const aggregateMonths = (months: MonthlySummary[], label: string): PeriodAggregate => {
+  const income = months.reduce((s, m) => s + m.income, 0);
+  const expense = months.reduce((s, m) => s + m.expense, 0);
+  const balance = income - expense;
+  return {
+    label,
+    income,
+    expense,
+    balance,
+    savingsRate: income > 0 ? (balance / income) * 100 : 0,
+    byCategory: expenseByCategory(months.flatMap((m) => m.transactions)),
+  };
+};
+
+const ComparatorTab = ({ data }: { data: DashboardData }) => {
+  const [mode, setMode] = useState<'months' | 'years'>('months');
+
+  const monthKeys = useMemo(() => data.monthlyData.map((m) => m.monthKey), [data]);
+  const years = useMemo(() => {
+    const set = new Set(data.monthlyData.map((m) => m.dateObj.getFullYear().toString()));
+    return Array.from(set).sort();
+  }, [data]);
+
+  const options = mode === 'months' ? monthKeys : years;
+
+  const [aKey, setAKey] = useState('');
+  const [bKey, setBKey] = useState('');
+
+  // Al cambiar de modo o de datos, fijar por defecto los dos últimos periodos.
+  useEffect(() => {
+    if (options.length === 0) return;
+    setBKey(options[options.length - 1]);
+    setAKey(options.length >= 2 ? options[options.length - 2] : options[options.length - 1]);
+  }, [mode, options.length]);
+
+  const aggregateFor = (key: string): PeriodAggregate | null => {
+    if (!key) return null;
+    if (mode === 'months') {
+      const m = data.monthlyData.find((x) => x.monthKey === key);
+      return m ? aggregateMonths([m], key) : null;
+    }
+    const months = data.monthlyData.filter((x) => x.dateObj.getFullYear().toString() === key);
+    return months.length ? aggregateMonths(months, key) : null;
+  };
+
+  const aggA = aggregateFor(aKey);
+  const aggB = aggregateFor(bKey);
+
+  const chartData = useMemo(() => {
+    if (!aggA || !aggB) return [];
+    const cats = new Set([...Object.keys(aggA.byCategory), ...Object.keys(aggB.byCategory)]);
+    return Array.from(cats)
+      .map((cat) => ({ name: cat, a: aggA.byCategory[cat] || 0, b: aggB.byCategory[cat] || 0 }))
+      .sort((x, y) => Math.max(y.a, y.b) - Math.max(x.a, x.b))
+      .slice(0, 8);
+  }, [aggA, aggB]);
+
+  if (options.length < 2) {
+    return (
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-10 text-center text-slate-500">
+        <span className="text-4xl block mb-3">⚖️</span>
+        Necesitas al menos dos {mode === 'months' ? 'meses' : 'años'} de datos para comparar.
+        {years.length >= 2 && mode === 'months' && (
+          <button onClick={() => setMode('years')} className="block mx-auto mt-4 text-indigo-400 hover:text-indigo-300 underline">
+            Comparar por años
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const selectClass = "bg-slate-800 border border-slate-700 text-white text-sm font-bold rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer";
+
+  return (
+    <div className="space-y-6">
+      {/* Controles */}
+      <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 flex flex-wrap items-end gap-6">
+        <div>
+          <span className="text-xs font-bold text-slate-500 uppercase block mb-2">Comparar por</span>
+          <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+            <button onClick={() => setMode('months')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'months' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>Meses</button>
+            <button onClick={() => setMode('years')} className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${mode === 'years' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>Años</button>
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-bold text-indigo-400 uppercase block mb-2">Periodo A</label>
+          <select value={aKey} onChange={(e) => setAKey(e.target.value)} className={selectClass}>
+            {options.map((o) => <option key={o} value={o} className="bg-slate-900">{o}</option>)}
+          </select>
+        </div>
+        <span className="text-slate-500 font-bold pb-2">vs</span>
+        <div>
+          <label className="text-xs font-bold text-pink-400 uppercase block mb-2">Periodo B</label>
+          <select value={bKey} onChange={(e) => setBKey(e.target.value)} className={selectClass}>
+            {options.map((o) => <option key={o} value={o} className="bg-slate-900">{o}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {aggA && aggB && (
+        <>
+          {/* KPIs lado a lado */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {[{ agg: aggA, accent: 'text-indigo-400', ref: null as PeriodAggregate | null }, { agg: aggB, accent: 'text-pink-400', ref: aggA }].map(({ agg, accent, ref }, i) => (
+              <div key={i} className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+                <h3 className={`text-lg font-bold mb-4 ${accent}`}>{agg.label}</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <KPIBox label="Ingresos" value={agg.income} isCurrency positive trendPct={ref ? pctChange(agg.income, ref.income) : null} />
+                  <KPIBox label="Gastos" value={agg.expense} isCurrency negative trendPct={ref ? pctChange(agg.expense, ref.expense) : null} />
+                  <KPIBox label="Ahorro" value={agg.balance} isCurrency positive={agg.balance >= 0} negative={agg.balance < 0} trendPct={ref ? pctChange(agg.balance, ref.balance) : null} />
+                  <KPIBox label="Tasa de ahorro" value={agg.savingsRate} suffix="%" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Gráfica comparativa por categoría */}
+          <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-1">Gasto por categoría</h3>
+            <p className="text-sm text-slate-500 mb-6">Principales categorías de gasto en ambos periodos.</p>
+            <ResponsiveContainer width="99%" height={380}>
+              <BarChart data={chartData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                <XAxis type="number" stroke="#64748b" tickFormatter={(v) => formatEuro(v)} tick={{ fontSize: 12 }} />
+                <YAxis dataKey="name" type="category" stroke="#94a3b8" width={110} tick={{ fontSize: 12 }} />
+                <Tooltip
+                  cursor={{ fill: '#334155', opacity: 0.2 }}
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', color: '#f8fafc' }}
+                  itemStyle={{ color: '#f8fafc' }}
+                  formatter={(v: number) => formatEuro(v)}
+                />
+                <Legend />
+                <Bar dataKey="a" name={aggA.label} fill="#6366f1" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="b" name={aggB.label} fill="#ec4899" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </>
       )}
     </div>
   );

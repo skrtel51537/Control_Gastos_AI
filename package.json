@@ -10,7 +10,10 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "electron": "wait-on tcp:3000 && cross-env NODE_ENV=development electron .",
     "electron:dev": "concurrently -k \"cross-env BROWSER=none npm run dev\" \"npm run electron\"",
@@ -38,6 +41,7 @@
     "tailwindcss": "^3.4.19",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
+    "vitest": "^4.1.7",
     "wait-on": "^9.0.3"
   },
   "build": {

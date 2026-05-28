@@ -26,44 +26,45 @@ const normalizeText = (text: string): string => {
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
 };
 
+// Lógica pura de parseo (sin FileReader) para poder probarla con tests.
+export const parseExcelData = (data: ArrayBuffer | Uint8Array): DashboardData => {
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(data, { type: 'array', cellDates: true });
+  } catch {
+    throw new Error("No se pudo leer el archivo. Comprueba que sea un Excel válido (.xlsx o .xls) y que no esté dañado.");
+  }
+
+  if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+    throw new Error("El archivo no contiene ninguna hoja de cálculo.");
+  }
+
+  let allTransactions: Transaction[] = [];
+
+  workbook.SheetNames.forEach(sheetName => {
+    const sheet = workbook.Sheets[sheetName];
+    const transactions = parseSheet(sheet, sheetName);
+    allTransactions = [...allTransactions, ...transactions];
+  });
+
+  if (allTransactions.length === 0) {
+    throw new Error("No se encontraron datos. Asegúrate de que la celda B1 tenga la fecha (ej: 'Noviembre 2024') y los gastos comiencen en la fila 5.");
+  }
+
+  // Ordenar por fecha descendente
+  allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  return buildDashboardData(allTransactions);
+};
+
 export const processExcelFile = async (file: File): Promise<DashboardData> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
     reader.onload = (e) => {
       try {
-        const data = e.target?.result;
-
-        let workbook: XLSX.WorkBook;
-        try {
-          workbook = XLSX.read(data, { type: 'array', cellDates: true });
-        } catch {
-          throw new Error("No se pudo leer el archivo. Comprueba que sea un Excel válido (.xlsx o .xls) y que no esté dañado.");
-        }
-
-        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-          throw new Error("El archivo no contiene ninguna hoja de cálculo.");
-        }
-
-        let allTransactions: Transaction[] = [];
-
-        workbook.SheetNames.forEach(sheetName => {
-          // Ignorar hojas ocultas o de sistema si es necesario
-          const sheet = workbook.Sheets[sheetName];
-          const transactions = parseSheet(sheet, sheetName);
-          allTransactions = [...allTransactions, ...transactions];
-        });
-
-        if (allTransactions.length === 0) {
-          throw new Error("No se encontraron datos. Asegúrate de que la celda B1 tenga la fecha (ej: 'Noviembre 2024') y los gastos comiencen en la fila 5.");
-        }
-
-        // Ordenar por fecha descendente
-        allTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-        const dashboardData = buildDashboardData(allTransactions);
-        resolve(dashboardData);
-
+        const result = e.target?.result;
+        resolve(parseExcelData(result as ArrayBuffer));
       } catch (error) {
         console.error("Error parsing Excel:", error);
         reject(error);
