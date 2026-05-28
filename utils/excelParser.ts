@@ -33,8 +33,18 @@ export const processExcelFile = async (file: File): Promise<DashboardData> => {
     reader.onload = (e) => {
       try {
         const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-        
+
+        let workbook: XLSX.WorkBook;
+        try {
+          workbook = XLSX.read(data, { type: 'array', cellDates: true });
+        } catch {
+          throw new Error("No se pudo leer el archivo. Comprueba que sea un Excel válido (.xlsx o .xls) y que no esté dañado.");
+        }
+
+        if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+          throw new Error("El archivo no contiene ninguna hoja de cálculo.");
+        }
+
         let allTransactions: Transaction[] = [];
 
         workbook.SheetNames.forEach(sheetName => {

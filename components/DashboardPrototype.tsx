@@ -5,39 +5,68 @@ import {
 } from 'recharts';
 import { DashboardData, MonthlySummary, Transaction } from '../types';
 import { processExcelFile, downloadSampleExcel } from '../utils/excelParser';
+import { formatEuro, formatPercent, formatSignedPercent } from '../utils/format';
+import { loadJSON, saveJSON, removeKey } from '../utils/storage';
+import {
+  FinanceSettings,
+  DEFAULT_SETTINGS,
+  SavingsGoal,
+  monthlyGoalStatus,
+  budgetStatuses,
+  topExpenses,
+  detectAnomalies,
+  comparePeriods,
+  projectYear,
+} from '../utils/finance';
+
+const DATA_KEY = 'finance_data_v3';
+const SETTINGS_KEY = 'finance_settings_v1';
 
 const COLORS = ['#6366f1', '#ec4899', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#64748b'];
 // Distinct palette for drill-down view to differentiate from main category view
 const COLORS_DRILLDOWN = ['#3b82f6', '#14b8a6', '#f97316', '#a855f7', '#f43f5e', '#84cc16', '#eab308', '#64748b'];
 const COLORS_LIGHT = ['#818cf8', '#f472b6', '#a78bfa', '#22d3ee', '#34d399', '#fbbf24', '#f87171', '#94a3b8'];
 
-type Tab = 'RESUMEN' | 'MENSUAL' | 'CATEGORIAS' | 'TENDENCIAS';
+type Tab = 'RESUMEN' | 'MENSUAL' | 'CATEGORIAS' | 'TENDENCIAS' | 'OBJETIVOS';
+
+const hydrateData = (parsed: any): DashboardData => {
+  if (parsed?.monthlyData) {
+    parsed.monthlyData = parsed.monthlyData.map((m: any) => ({
+      ...m,
+      dateObj: new Date(m.dateObj),
+    }));
+  }
+  return parsed;
+};
 
 export const DashboardPrototype: React.FC = () => {
   const [rawData, setRawData] = useState<DashboardData | null>(null);
+  const [settings, setSettings] = useState<FinanceSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('RESUMEN');
-  
+
   // Year Filter State
   const [selectedYear, setSelectedYear] = useState<string>('TOTAL');
-  
+
   useEffect(() => {
-    const saved = localStorage.getItem('finance_data_v3');
-    if (saved) {
-      try { 
-        const parsed = JSON.parse(saved);
-        // Hydrate dates properly from JSON strings
-        if (parsed.monthlyData) {
-            parsed.monthlyData = parsed.monthlyData.map((m: any) => ({
-                ...m,
-                dateObj: new Date(m.dateObj)
-            }));
-        }
-        setRawData(parsed); 
-      } catch (e) { console.error(e); }
-    }
+    loadJSON<any>(DATA_KEY)
+      .then((parsed) => {
+        if (parsed) setRawData(hydrateData(parsed));
+      })
+      .catch((e) => console.error(e));
+
+    loadJSON<FinanceSettings>(SETTINGS_KEY)
+      .then((saved) => {
+        if (saved) setSettings({ ...DEFAULT_SETTINGS, ...saved });
+      })
+      .catch((e) => console.error(e));
   }, []);
+
+  const updateSettings = (next: FinanceSettings) => {
+    setSettings(next);
+    saveJSON(SETTINGS_KEY, next).catch((e) => console.error(e));
+  };
 
   // Calculate available years from raw data
   const availableYears = useMemo(() => {
@@ -87,7 +116,7 @@ export const DashboardPrototype: React.FC = () => {
     try {
       const processed = await processExcelFile(file);
       setRawData(processed);
-      localStorage.setItem('finance_data_v3', JSON.stringify(processed));
+      await saveJSON(DATA_KEY, processed);
       setSelectedYear('TOTAL'); // Reset filter on new upload
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido.");
@@ -96,7 +125,7 @@ export const DashboardPrototype: React.FC = () => {
     }
   };
   
-  const clearData = () => { localStorage.removeItem('finance_data_v3'); setRawData(null); };
+  const clearData = () => { removeKey(DATA_KEY); setRawData(null); };
 
   if (!filteredData) return <UploadView isLoading={isLoading} error={error} onUpload={handleFileUpload} />;
 
@@ -114,9 +143,10 @@ export const DashboardPrototype: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 scroll-smooth">
           <div className="max-w-7xl mx-auto space-y-6">
             {activeTab === 'RESUMEN' && <OverviewTab data={filteredData} selectedYear={selectedYear} />}
-            {activeTab === 'MENSUAL' && <MonthlyTab data={filteredData} />}
+            {activeTab === 'MENSUAL' && <MonthlyTab data={filteredData} settings={settings} />}
             {activeTab === 'CATEGORIAS' && <CategoriesTab data={filteredData} />}
             {activeTab === 'TENDENCIAS' && <TrendsTab data={filteredData} />}
+            {activeTab === 'OBJETIVOS' && <GoalsTab data={filteredData} settings={settings} onChange={updateSettings} />}
           </div>
         </div>
       </main>
@@ -137,7 +167,8 @@ const Sidebar = ({ activeTab, onTabChange, onClear }: { activeTab: Tab, onTabCha
         { id: 'RESUMEN', label: 'Resumen Global', icon: '📊' },
         { id: 'MENSUAL', label: 'Análisis Mensual', icon: '📅' },
         { id: 'CATEGORIAS', label: 'Desglose Categorías', icon: '🏷️' },
-        { id: 'TENDENCIAS', label: 'Tendencias', icon: '📈' }
+        { id: 'TENDENCIAS', label: 'Tendencias', icon: '📈' },
+        { id: 'OBJETIVOS', label: 'Objetivos y Presupuestos', icon: '🎯' }
       ].map((item) => (
         <button key={item.id} onClick={() => onTabChange(item.id as Tab)}
           className={`w-full flex items-center p-3 rounded-xl transition-all ${activeTab === item.id ? 'bg-indigo-600/10 text-indigo-400 font-medium border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
@@ -184,15 +215,22 @@ const Header = ({ activeTab, years, selectedYear, onYearChange }: { activeTab: T
   </header>
 );
 
-const KPIBox = ({ label, value, isCurrency, suffix, positive, negative }: { label: string, value: number, isCurrency?: boolean, suffix?: string, positive?: boolean, negative?: boolean }) => {
+const KPIBox = ({ label, value, isCurrency, suffix, positive, negative, trendPct }: { label: string, value: number, isCurrency?: boolean, suffix?: string, positive?: boolean, negative?: boolean, trendPct?: number | null }) => {
   const colorClass = positive ? "text-emerald-400" : negative ? "text-rose-400" : "text-white";
+  const displayValue = isCurrency
+    ? formatEuro(value)
+    : suffix === '%'
+      ? formatPercent(value)
+      : `${Math.round(value).toLocaleString('es-ES')}${suffix ?? ''}`;
   return (
     <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
        <span className="text-slate-400 text-xs font-bold uppercase">{label}</span>
-       <p className={`text-2xl font-bold mt-1 ${colorClass}`}>
-         {isCurrency && '€'}{Math.round(value).toLocaleString()}
-         {suffix}
-       </p>
+       <p className={`text-2xl font-bold mt-1 ${colorClass}`}>{displayValue}</p>
+       {trendPct != null && Number.isFinite(trendPct) && (
+         <p className={`text-xs font-medium mt-1 ${trendPct > 0 ? 'text-emerald-400' : trendPct < 0 ? 'text-rose-400' : 'text-slate-500'}`}>
+           {trendPct > 0 ? '↑' : trendPct < 0 ? '↓' : '→'} {formatSignedPercent(trendPct)} vs periodo anterior
+         </p>
+       )}
     </div>
   );
 };
@@ -227,6 +265,9 @@ const OverviewTab = ({ data, selectedYear }: { data: DashboardData, selectedYear
   const alerts = useMemo(() => {
     return data.monthlyData.filter(m => m.expense > (m.income * (alertThreshold / 100)));
   }, [data, alertThreshold]);
+
+  // F3: anomalías de gasto por categoría (desviación sobre la media histórica)
+  const anomalies = useMemo(() => detectAnomalies(data), [data]);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -296,6 +337,32 @@ const OverviewTab = ({ data, selectedYear }: { data: DashboardData, selectedYear
           </ResponsiveContainer>
         </div>
       </div>
+
+      {/* F3: Detección de gastos atípicos */}
+      {anomalies.length > 0 && (
+        <div className="bg-slate-900/50 border border-amber-500/20 rounded-2xl p-6">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xl">🔎</span>
+            <h3 className="text-lg font-semibold text-white">Gastos fuera de lo habitual</h3>
+          </div>
+          <p className="text-sm text-slate-500 mb-5">Meses y categorías cuyo gasto se desvía claramente al alza respecto a tu media histórica.</p>
+          <div className="space-y-3">
+            {anomalies.slice(0, 6).map((a, i) => (
+              <div key={`${a.monthKey}-${a.category}-${i}`} className="flex flex-wrap items-center justify-between gap-2 bg-slate-800/40 rounded-lg px-4 py-3">
+                <div>
+                  <span className="text-slate-200 font-medium">{a.category}</span>
+                  <span className="text-slate-500 text-sm ml-2">· {a.monthKey}</span>
+                </div>
+                <div className="flex items-center gap-4 text-sm">
+                  <span className="text-slate-400">media {formatEuro(a.average)}</span>
+                  <span className="text-white font-mono font-bold">{formatEuro(a.amount)}</span>
+                  <span className="px-2 py-1 rounded bg-amber-500/15 text-amber-400 font-bold text-xs">{formatSignedPercent(a.deltaPct)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Cumulative Savings Chart */}
@@ -394,7 +461,7 @@ const OverviewTab = ({ data, selectedYear }: { data: DashboardData, selectedYear
   );
 };
 
-const MonthlyTab = ({ data }: { data: DashboardData }) => {
+const MonthlyTab = ({ data, settings }: { data: DashboardData, settings: FinanceSettings }) => {
   const [selectedMonthIdx, setSelectedMonthIdx] = useState(data.monthlyData.length > 0 ? data.monthlyData.length - 1 : 0);
   const [drilldownCategory, setDrilldownCategory] = useState<string | null>(null);
 
@@ -460,6 +527,12 @@ const MonthlyTab = ({ data }: { data: DashboardData }) => {
   const safeIndex = (selectedMonthIdx >= data.monthlyData.length) ? data.monthlyData.length - 1 : selectedMonthIdx;
   const monthData = data.monthlyData[safeIndex];
   if (!monthData) return <div>Error cargando datos del mes.</div>;
+
+  // F4: comparativa con el mes anterior. F3: mayores gastos del mes. F2: presupuestos.
+  const prevMonth = safeIndex > 0 ? data.monthlyData[safeIndex - 1] : null;
+  const comparison = comparePeriods(monthData, prevMonth);
+  const biggestExpenses = topExpenses(monthData, 5);
+  const monthBudgets = budgetStatuses(monthData, settings.categoryBudgets);
 
   // --- Aggregate Data for Pie Chart (Supports Drill-down) ---
   const activePieData = useMemo(() => {
@@ -594,19 +667,95 @@ const MonthlyTab = ({ data }: { data: DashboardData }) => {
          </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-           <span className="text-slate-400 text-xs">Ingresos</span>
-           <p className="text-xl font-bold text-emerald-400">€{Math.round(monthData.income).toLocaleString()}</p>
+      {/* KPIs con tendencia frente al mes anterior */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KPIBox label="Ingresos" value={monthData.income} isCurrency positive trendPct={comparison ? comparison.incomeDeltaPct : null} />
+        <KPIBox label="Gastos" value={monthData.expense} isCurrency negative trendPct={comparison ? comparison.expenseDeltaPct : null} />
+        <KPIBox label="Tasa de ahorro" value={monthData.savingsRate} suffix="%" />
+      </div>
+
+      {/* F4: Comparativa con el mes anterior */}
+      {comparison && (
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-1">Comparativa frente a {comparison.previous.monthKey}</h3>
+          <p className="text-sm text-slate-500 mb-5">Variación de {monthData.monthKey} respecto al mes anterior.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-slate-800/40 rounded-xl p-4">
+              <span className="text-xs text-slate-400 uppercase font-bold">Variación del ahorro</span>
+              <p className={`text-xl font-bold mt-1 ${comparison.balanceDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {comparison.balanceDelta >= 0 ? '+' : '−'}{formatEuro(Math.abs(comparison.balanceDelta))}
+              </p>
+            </div>
+            <div className="bg-slate-800/40 rounded-xl p-4">
+              <span className="text-xs text-slate-400 uppercase font-bold">Categoría que más sube</span>
+              {comparison.topRiser ? (
+                <p className="text-base font-bold mt-1 text-rose-400">
+                  {comparison.topRiser.category} <span className="text-sm font-mono">{formatSignedPercent(comparison.topRiser.deltaPct)}</span>
+                </p>
+              ) : <p className="text-base mt-1 text-slate-500">—</p>}
+            </div>
+            <div className="bg-slate-800/40 rounded-xl p-4">
+              <span className="text-xs text-slate-400 uppercase font-bold">Categoría que más baja</span>
+              {comparison.topFaller ? (
+                <p className="text-base font-bold mt-1 text-emerald-400">
+                  {comparison.topFaller.category} <span className="text-sm font-mono">{formatSignedPercent(comparison.topFaller.deltaPct)}</span>
+                </p>
+              ) : <p className="text-base mt-1 text-slate-500">—</p>}
+            </div>
+          </div>
         </div>
-        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-           <span className="text-slate-400 text-xs">Gastos</span>
-           <p className="text-xl font-bold text-rose-400">€{Math.round(monthData.expense).toLocaleString()}</p>
+      )}
+
+      {/* F3: Mayores gastos del mes + F2: presupuestos del mes */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Mayores gastos del mes</h3>
+          {biggestExpenses.length === 0 ? (
+            <p className="text-slate-500 text-sm">No hay gastos registrados este mes.</p>
+          ) : (
+            <ul className="space-y-2">
+              {biggestExpenses.map((t, i) => (
+                <li key={t.id} className="flex items-center justify-between gap-3 bg-slate-800/40 rounded-lg px-4 py-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-700 text-xs font-bold text-slate-300 shrink-0">{i + 1}</span>
+                    <div className="min-w-0">
+                      <p className="text-slate-200 text-sm font-medium truncate">{t.subcategory || t.category}</p>
+                      <p className="text-slate-500 text-xs truncate">{t.category}</p>
+                    </div>
+                  </div>
+                  <span className="text-white font-mono font-bold text-sm shrink-0">{formatEuro(Math.abs(t.amount))}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <div className="bg-slate-800/50 p-4 rounded-xl border border-slate-700">
-           <span className="text-slate-400 text-xs">Ahorro</span>
-           <p className="text-xl font-bold text-indigo-400">{Math.round(monthData.savingsRate)}%</p>
+
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Presupuestos del mes</h3>
+          {monthBudgets.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-500 opacity-60 py-6">
+              <span className="text-3xl mb-2">🎯</span>
+              <p className="text-sm text-center">Define límites en la pestaña <span className="text-indigo-400">Objetivos y Presupuestos</span>.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {monthBudgets.map((b) => {
+                const s = stateStyles[b.state];
+                const pct = Math.min(100, b.usedPct);
+                return (
+                  <div key={b.category}>
+                    <div className="flex justify-between items-center mb-1 text-sm">
+                      <span className="text-slate-300 font-medium">{b.category}</span>
+                      <span className={`font-mono font-bold ${s.text}`}>{formatEuro(b.spent)} / {formatEuro(b.budget)}</span>
+                    </div>
+                    <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                      <div className={`h-full ${s.bar} rounded-full`} style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -999,6 +1148,229 @@ const TrendsTab = ({ data }: { data: DashboardData }) => {
            </LineChart>
          </ResponsiveContainer>
        </div>
+    </div>
+  );
+};
+
+// Semáforo de estado para presupuestos/objetivos (verde / ámbar / rojo)
+const stateStyles: Record<'ok' | 'warning' | 'over', { text: string; bar: string; label: string }> = {
+  ok: { text: 'text-emerald-400', bar: 'bg-emerald-500', label: 'En objetivo' },
+  warning: { text: 'text-amber-400', bar: 'bg-amber-500', label: 'Cerca del límite' },
+  over: { text: 'text-rose-400', bar: 'bg-rose-500', label: 'Superado' },
+};
+
+const GoalsTab = ({ data, settings, onChange }: { data: DashboardData, settings: FinanceSettings, onChange: (s: FinanceSettings) => void }) => {
+  const months = data.monthlyData;
+  const [budgetMonthIdx, setBudgetMonthIdx] = useState(months.length > 0 ? months.length - 1 : 0);
+
+  const goal = settings.savingsGoal;
+
+  const setGoal = (next: SavingsGoal | null) => onChange({ ...settings, savingsGoal: next });
+
+  const setBudget = (category: string, value: number) => {
+    const next = { ...settings.categoryBudgets };
+    if (value > 0) next[category] = value;
+    else delete next[category];
+    onChange({ ...settings, categoryBudgets: next });
+  };
+
+  const safeBudgetIdx = budgetMonthIdx >= months.length ? months.length - 1 : budgetMonthIdx;
+  const budgetMonth = months[safeBudgetIdx] || null;
+
+  const goalRows = useMemo(
+    () => months.map((m) => ({ month: m, status: monthlyGoalStatus(m, goal) })),
+    [months, goal],
+  );
+
+  const budgets = budgetMonth ? budgetStatuses(budgetMonth, settings.categoryBudgets) : [];
+  const projection = projectYear(months);
+
+  if (months.length === 0) {
+    return <div className="p-8 text-center text-slate-500">No hay datos para el periodo seleccionado.</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* F1: Objetivo de ahorro */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-lg font-semibold text-white mb-1">Objetivo de ahorro mensual</h3>
+        <p className="text-sm text-slate-500 mb-5">Define cuánto quieres ahorrar cada mes. Se compara con tu ahorro real.</p>
+
+        <div className="flex flex-wrap items-end gap-4">
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Tipo de objetivo</label>
+            <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+              <button
+                onClick={() => setGoal({ type: 'amount', value: goal?.value ?? 0 })}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${goal?.type === 'amount' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                € al mes
+              </button>
+              <button
+                onClick={() => setGoal({ type: 'percent', value: goal?.value ?? 0 })}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${goal?.type === 'percent' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                % de ingresos
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-500 uppercase block mb-2">Valor</label>
+            <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+              <input
+                type="number"
+                min="0"
+                value={goal?.value ?? ''}
+                placeholder="0"
+                onChange={(e) => setGoal({ type: goal?.type ?? 'amount', value: Math.max(0, parseFloat(e.target.value) || 0) })}
+                className="w-24 bg-transparent text-white outline-none text-sm font-bold"
+              />
+              <span className="text-slate-400 text-sm ml-1">{goal?.type === 'percent' ? '%' : '€'}</span>
+            </div>
+          </div>
+
+          {goal && (
+            <button onClick={() => setGoal(null)} className="text-sm text-rose-400 hover:text-rose-300 px-3 py-2">
+              Quitar objetivo
+            </button>
+          )}
+        </div>
+
+        {goal && goal.value > 0 && (
+          <div className="mt-6 overflow-x-auto max-h-[280px]">
+            <table className="w-full text-left text-sm">
+              <thead className="text-slate-500 border-b border-slate-800 sticky top-0 bg-slate-900">
+                <tr>
+                  <th className="pb-2">Mes</th>
+                  <th className="pb-2 text-right">Objetivo</th>
+                  <th className="pb-2 text-right">Ahorro real</th>
+                  <th className="pb-2 pl-4 w-1/3">Progreso</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {goalRows.map(({ month, status }) => {
+                  if (!status) return null;
+                  const pct = Math.max(0, Math.min(100, status.progressPct));
+                  const st = status.met ? 'ok' : status.progressPct >= 70 ? 'warning' : 'over';
+                  const s = stateStyles[st];
+                  return (
+                    <tr key={month.monthKey} className="hover:bg-slate-800/40">
+                      <td className="py-3 text-slate-300 font-medium">{month.monthKey}</td>
+                      <td className="py-3 text-right text-slate-400 font-mono">{formatEuro(status.target)}</td>
+                      <td className={`py-3 text-right font-mono font-bold ${s.text}`}>{formatEuro(status.actual)}</td>
+                      <td className="py-3 pl-4">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                            <div className={`h-full ${s.bar} rounded-full`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className={`text-xs font-bold w-10 text-right ${s.text}`}>{formatPercent(status.progressPct)}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* F2: Presupuestos por categoría */}
+      <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+          <h3 className="text-lg font-semibold text-white">Presupuestos por categoría</h3>
+          {months.length > 0 && (
+            <div className="flex items-center bg-slate-800 rounded-lg px-3 py-1 border border-slate-700">
+              <span className="text-xs text-slate-400 uppercase font-bold mr-2">Mes:</span>
+              <select
+                value={safeBudgetIdx}
+                onChange={(e) => setBudgetMonthIdx(parseInt(e.target.value))}
+                className="bg-transparent text-sm font-bold text-white outline-none cursor-pointer"
+              >
+                {months.map((m, i) => (
+                  <option key={m.monthKey} value={i} className="bg-slate-900">{m.monthKey}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+        <p className="text-sm text-slate-500 mb-5">Asigna un límite mensual a cada categoría y compáralo con el gasto real del mes elegido.</p>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Configuración de límites */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Límites mensuales (€)</h4>
+            {data.categories.map((cat) => (
+              <div key={cat} className="flex items-center justify-between gap-3 bg-slate-800/40 rounded-lg px-3 py-2">
+                <span className="text-sm text-slate-300 truncate">{cat}</span>
+                <div className="flex items-center bg-slate-800 border border-slate-700 rounded-lg px-2 py-1">
+                  <input
+                    type="number"
+                    min="0"
+                    value={settings.categoryBudgets[cat] ?? ''}
+                    placeholder="—"
+                    onChange={(e) => setBudget(cat, Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-20 bg-transparent text-white outline-none text-sm text-right font-bold"
+                  />
+                  <span className="text-slate-400 text-xs ml-1">€</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Estado del mes seleccionado */}
+          <div>
+            <h4 className="text-xs font-bold text-slate-500 uppercase mb-3">Gasto vs presupuesto · {budgetMonth?.monthKey}</h4>
+            {budgets.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-500 opacity-60 py-8">
+                <span className="text-3xl mb-2">🎯</span>
+                <p className="text-sm text-center">Define algún límite a la izquierda para ver el seguimiento.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {budgets.map((b) => {
+                  const s = stateStyles[b.state];
+                  const pct = Math.min(100, b.usedPct);
+                  return (
+                    <div key={b.category}>
+                      <div className="flex justify-between items-center mb-1 text-sm">
+                        <span className="text-slate-300 font-medium">{b.category}</span>
+                        <span className={`font-mono font-bold ${s.text}`}>
+                          {formatEuro(b.spent)} / {formatEuro(b.budget)}
+                        </span>
+                      </div>
+                      <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div className={`h-full ${s.bar} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className={`text-xs ${s.text}`}>{s.label}</span>
+                        <span className={`text-xs font-bold ${s.text}`}>{formatPercent(b.usedPct)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* F5: Proyección a fin de año */}
+      {projection && (
+        <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-1">Proyección a 12 meses</h3>
+          <p className="text-sm text-slate-500 mb-5">
+            Estimación basada en la media de los {projection.monthsRecorded} {projection.monthsRecorded === 1 ? 'mes registrado' : 'meses registrados'} en el periodo seleccionado.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <KPIBox label="Ahorro medio / mes" value={projection.avgMonthlyBalance} isCurrency positive={projection.avgMonthlyBalance >= 0} negative={projection.avgMonthlyBalance < 0} />
+            <KPIBox label="Gasto medio / mes" value={projection.avgMonthlyExpense} isCurrency negative />
+            <KPIBox label="Ahorro anual estimado" value={projection.projectedAnnualBalance} isCurrency positive={projection.projectedAnnualBalance >= 0} negative={projection.projectedAnnualBalance < 0} />
+            <KPIBox label="Gasto anual estimado" value={projection.projectedAnnualExpense} isCurrency negative />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

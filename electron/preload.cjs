@@ -11,4 +11,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     restartApp: () => ipcRenderer.send('restart_app'),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    // Cifrado local de datos financieros
+    isEncryptionAvailable: () => ipcRenderer.invoke('secure-available'),
+    encrypt: (plain) => ipcRenderer.invoke('secure-encrypt', plain),
+    decrypt: (b64) => ipcRenderer.invoke('secure-decrypt', b64),
 });

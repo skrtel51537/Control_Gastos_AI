@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, safeStorage } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
@@ -86,4 +86,17 @@ ipcMain.on('restart_app', () => {
 
 ipcMain.handle('check-for-updates', () => {
     return autoUpdater.checkForUpdatesAndNotify();
+});
+
+// Cifrado local de datos financieros mediante el almacén seguro del sistema
+ipcMain.handle('secure-available', () => safeStorage.isEncryptionAvailable());
+
+ipcMain.handle('secure-encrypt', (_event, plain) => {
+    if (!safeStorage.isEncryptionAvailable() || typeof plain !== 'string') return null;
+    return safeStorage.encryptString(plain).toString('base64');
+});
+
+ipcMain.handle('secure-decrypt', (_event, b64) => {
+    if (!safeStorage.isEncryptionAvailable() || typeof b64 !== 'string') return null;
+    return safeStorage.decryptString(Buffer.from(b64, 'base64'));
 });
