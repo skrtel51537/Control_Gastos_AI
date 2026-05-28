@@ -178,8 +178,8 @@ const Sidebar = ({ activeTab, onTabChange, onClear }: { activeTab: Tab, onTabCha
       ].map((item) => (
         <button key={item.id} onClick={() => onTabChange(item.id as Tab)}
           className={`w-full flex items-center p-3 rounded-xl transition-all ${activeTab === item.id ? 'bg-indigo-600/10 text-indigo-400 font-medium border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-          <span className="mr-0 lg:mr-3 text-xl">{item.icon}</span>
-          <span className="hidden lg:block">{item.label}</span>
+          <span className="mr-0 lg:mr-3 text-xl shrink-0">{item.icon}</span>
+          <span className="hidden lg:block text-left leading-tight">{item.label}</span>
         </button>
       ))}
     </nav>
@@ -977,14 +977,14 @@ const CategoriesTab = ({ data }: { data: DashboardData }) => {
                 </div>
              </div>
              
-             <ResponsiveContainer width="99%" height={350}>
+             <ResponsiveContainer width="99%" height={Math.max(350, categoryData.length * 32)}>
                <BarChart data={categoryData} layout="vertical" margin={{ top: 5, right: 40, left: 40, bottom: 5 }}>
                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
                  <XAxis type="number" stroke="#64748b" tickFormatter={(val) => `€${val}`} />
-                 <YAxis dataKey="name" type="category" stroke="#94a3b8" width={100} tick={{fontSize: 12}} />
-                 <Tooltip 
+                 <YAxis dataKey="name" type="category" stroke="#94a3b8" width={110} tick={{fontSize: 10}} interval={0} />
+                 <Tooltip
                     cursor={{fill: '#334155', opacity: 0.2}}
-                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#f8fafc' }} 
+                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#f8fafc' }}
                     itemStyle={{ color: '#f8fafc' }}
                     formatter={(val: number) => formatEuro(val)}
                  />
@@ -992,7 +992,7 @@ const CategoriesTab = ({ data }: { data: DashboardData }) => {
                    {categoryData.map((entry, index) => (
                      <Cell key={`cell-${index}`} fill={entry.color} />
                    ))}
-                   <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={12} formatter={(val: number) => formatEuro(val)} />
+                   <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={10} formatter={(val: number) => formatEuro(val)} />
                  </Bar>
                </BarChart>
              </ResponsiveContainer>
