@@ -148,7 +148,7 @@ export const CategoriesTab = ({ data }: { data: DashboardData }) => {
                    {categoryData.map((entry, index) => (
                      <Cell key={`cell-${index}`} fill={entry.color} />
                    ))}
-                   <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={10} formatter={(val: number) => formatEuro(val)} />
+                   <LabelList dataKey="value" position="right" fill="#94a3b8" fontSize={10} formatter={(val) => formatEuro(Number(val))} />
                  </Bar>
                </BarChart>
              </ResponsiveContainer>

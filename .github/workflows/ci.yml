@@ -1,0 +1,36 @@
+# Integración continua: en cada push o pull request se comprueban tipos,
+# tests y vulnerabilidades de las dependencias que viajan dentro de la app.
+# Si algo falla, GitHub marca el commit con una X roja.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  calidad:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Comprobar tipos (TypeScript)
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Compilar
+        run: npm run build
+
+      - name: Vulnerabilidades en dependencias de la app
+        run: npm audit --omit=dev
