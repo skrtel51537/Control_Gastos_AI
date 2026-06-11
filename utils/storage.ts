@@ -71,3 +71,9 @@ export async function loadJSON<T>(key: string): Promise<T | null> {
 export function removeKey(key: string): void {
   localStorage.removeItem(key);
 }
+
+// Permite distinguir "no hay nada guardado" de "hay datos pero no se pudieron
+// leer" (p. ej. si el descifrado falla tras reinstalar el sistema).
+export function hasKey(key: string): boolean {
+  return localStorage.getItem(key) !== null;
+}

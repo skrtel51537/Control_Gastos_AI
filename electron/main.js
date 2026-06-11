@@ -9,11 +9,20 @@ const log = require('electron-log');
 
 // Global error handler to catch startup crashes
 process.on('uncaughtException', (error) => {
-    dialog.showErrorBox('Startup Error', `An error occurred: ${error.stack}`);
+    // El detalle (stack) va al log; al usuario solo un mensaje genérico,
+    // sin exponer rutas internas del sistema.
+    log.error('Error no controlado:', error);
+    dialog.showErrorBox(
+        'Error inesperado',
+        'La aplicación ha encontrado un error inesperado y puede no funcionar correctamente.\n' +
+        'El detalle ha quedado registrado en el archivo de logs de la aplicación.'
+    );
 });
 
 // Configure logging
 log.transports.file.level = 'info';
+// Rotación: evita que el archivo de log crezca sin límite con los años.
+log.transports.file.maxSize = 5 * 1024 * 1024; // 5 MB
 autoUpdater.logger = log;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -40,6 +49,19 @@ function createWindow() {
     });
 
     const isDev = process.env.NODE_ENV === 'development';
+
+    // La app es 100% local: denegar la apertura de ventanas nuevas y cualquier
+    // navegación fuera de la propia app (defensa en profundidad ante un XSS).
+    mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        const allowed = url.startsWith('file://') || (isDev && url.startsWith('http://localhost:3000'));
+        if (!allowed) event.preventDefault();
+    });
+
+    // La app no usa cámara, micrófono, ubicación, etc.: denegar todo permiso.
+    mainWindow.webContents.session.setPermissionRequestHandler((_wc, _permission, callback) => {
+        callback(false);
+    });
 
     if (isDev) {
         mainWindow.loadURL('http://localhost:3000');

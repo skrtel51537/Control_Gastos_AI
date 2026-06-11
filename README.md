@@ -17,6 +17,8 @@ los datos financieros **se quedan en tu equipo** y no se envían a ningún servi
 - Comparativa con el mes anterior (variación de ahorro y categorías que más suben/bajan).
 - Proyección de ahorro y gasto a 12 meses.
 - Filtro por año.
+- Copia de seguridad: exporta tus datos y configuración a un archivo y
+  restáuralos en cualquier equipo (útil al cambiar de ordenador o reinstalar).
 
 Los datos guardados (incluidos objetivos y presupuestos) se **cifran en local**
 con el almacén seguro del sistema operativo en la app de escritorio.

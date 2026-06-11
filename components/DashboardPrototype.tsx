@@ -6,7 +6,8 @@ import {
 import { DashboardData, MonthlySummary, Transaction } from '../types';
 import { processExcelFile, downloadSampleExcel } from '../utils/excelParser';
 import { formatEuro, formatPercent, formatSignedPercent } from '../utils/format';
-import { loadJSON, saveJSON, removeKey } from '../utils/storage';
+import { loadJSON, saveJSON, removeKey, hasKey } from '../utils/storage';
+import { buildBackup, parseBackup, backupFilename } from '../utils/backup';
 import {
   FinanceSettings,
   DEFAULT_SETTINGS,
@@ -48,6 +49,8 @@ export const DashboardPrototype: React.FC = () => {
   const [settings, setSettings] = useState<FinanceSettings>(DEFAULT_SETTINGS);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Avisos de almacenamiento (guardado fallido, etc.) visibles dentro del dashboard.
+  const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('RESUMEN');
 
   // Year Filter State
@@ -56,7 +59,17 @@ export const DashboardPrototype: React.FC = () => {
   useEffect(() => {
     loadJSON<any>(DATA_KEY)
       .then((parsed) => {
-        if (parsed) setRawData(hydrateData(parsed));
+        if (parsed) {
+          setRawData(hydrateData(parsed));
+        } else if (hasKey(DATA_KEY)) {
+          // Hay algo guardado pero no se pudo leer (p. ej. descifrado fallido
+          // tras reinstalar el sistema): avisar en vez de aparecer "vacío".
+          setError(
+            'Hay datos guardados de una sesión anterior, pero no se han podido leer. ' +
+            'Esto puede ocurrir tras reinstalar el sistema o cambiar de cuenta de usuario. ' +
+            'Vuelve a cargar tu Excel o restaura una copia de seguridad.'
+          );
+        }
       })
       .catch((e) => console.error(e));
 
@@ -69,7 +82,11 @@ export const DashboardPrototype: React.FC = () => {
 
   const updateSettings = (next: FinanceSettings) => {
     setSettings(next);
-    saveJSON(SETTINGS_KEY, next).catch((e) => console.error(e));
+    saveJSON(SETTINGS_KEY, next).catch(() => {
+      setStorageWarning(
+        'No se ha podido guardar la configuración en este equipo. Tus cambios se perderán al cerrar la aplicación.'
+      );
+    });
   };
 
   // Calculate available years from raw data
@@ -120,22 +137,79 @@ export const DashboardPrototype: React.FC = () => {
     try {
       const processed = await processExcelFile(file);
       setRawData(processed);
-      await saveJSON(DATA_KEY, processed);
       setSelectedYear('TOTAL'); // Reset filter on new upload
+      try {
+        await saveJSON(DATA_KEY, processed);
+      } catch {
+        setStorageWarning(
+          'Los datos se han cargado, pero no se han podido guardar en este equipo: la próxima vez tendrás que volver a cargar el Excel.'
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error desconocido.");
     } finally {
       setIsLoading(false);
     }
   };
-  
+
   const clearData = () => { removeKey(DATA_KEY); setRawData(null); };
 
-  if (!filteredData) return <UploadView isLoading={isLoading} error={error} onUpload={handleFileUpload} />;
+  // --- Copia de seguridad (exportar / restaurar) ---
+
+  const exportBackup = () => {
+    const ok = window.confirm(
+      'Se descargará un archivo con tus datos y configuración SIN cifrar, para poder ' +
+      'restaurarlo en cualquier equipo. Guárdalo en un lugar seguro.\n\n¿Continuar?'
+    );
+    if (!ok) return;
+    const blob = new Blob([JSON.stringify(buildBackup(rawData, settings), null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = backupFilename();
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const restoreBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // permite volver a elegir el mismo archivo más tarde
+    if (!file) return;
+    if (rawData) {
+      const ok = window.confirm(
+        'Restaurar la copia sustituirá los datos y la configuración actuales de este equipo.\n\n¿Continuar?'
+      );
+      if (!ok) return;
+    }
+    try {
+      const restored = parseBackup(await file.text());
+      if (restored.settings) setSettings({ ...DEFAULT_SETTINGS, ...restored.settings });
+      if (restored.data) {
+        setRawData(restored.data);
+        setSelectedYear('TOTAL');
+      }
+      setError(null);
+      try {
+        if (restored.data) await saveJSON(DATA_KEY, restored.data);
+        if (restored.settings) await saveJSON(SETTINGS_KEY, restored.settings);
+      } catch {
+        setStorageWarning('La copia se ha restaurado, pero no se ha podido guardar en este equipo.');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'No se pudo restaurar la copia de seguridad.';
+      // Si el dashboard está abierto el error se muestra como aviso; si no, en la pantalla de carga.
+      if (rawData) setStorageWarning(msg);
+      else setError(msg);
+    }
+  };
+
+  if (!filteredData) return <UploadView isLoading={isLoading} error={error} onUpload={handleFileUpload} onRestore={restoreBackup} />;
 
   return (
     <div className="flex h-screen bg-slate-950 overflow-hidden text-slate-200 font-sans">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onClear={clearData} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onClear={clearData} onExport={exportBackup} onRestore={restoreBackup} />
       
       <main className="flex-1 flex flex-col overflow-hidden relative">
         <Header 
@@ -146,6 +220,18 @@ export const DashboardPrototype: React.FC = () => {
         />
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 scroll-smooth">
           <div className="max-w-7xl mx-auto space-y-6">
+            {storageWarning && (
+              <div className="flex items-start justify-between gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-sm">
+                <span>⚠️ {storageWarning}</span>
+                <button
+                  onClick={() => setStorageWarning(null)}
+                  className="text-amber-400 hover:text-amber-200 font-bold px-1 shrink-0"
+                  title="Cerrar aviso"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             {activeTab === 'RESUMEN' && <OverviewTab data={filteredData} selectedYear={selectedYear} />}
             {activeTab === 'MENSUAL' && <MonthlyTab data={filteredData} settings={settings} />}
             {activeTab === 'CATEGORIAS' && <CategoriesTab data={filteredData} />}
@@ -161,7 +247,13 @@ export const DashboardPrototype: React.FC = () => {
 
 // --- SUB-COMPONENTS ---
 
-const Sidebar = ({ activeTab, onTabChange, onClear }: { activeTab: Tab, onTabChange: (t: Tab) => void, onClear: () => void }) => (
+const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore }: {
+  activeTab: Tab,
+  onTabChange: (t: Tab) => void,
+  onClear: () => void,
+  onExport: () => void,
+  onRestore: (e: React.ChangeEvent<HTMLInputElement>) => void,
+}) => (
   <aside className="w-20 lg:w-64 border-r border-slate-800 bg-slate-900/50 flex flex-col hidden sm:flex">
     <div className="h-16 flex items-center justify-center lg:justify-start lg:px-6 border-b border-slate-800">
       <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-xl shadow-lg shadow-indigo-500/20">💸</div>
@@ -183,10 +275,27 @@ const Sidebar = ({ activeTab, onTabChange, onClear }: { activeTab: Tab, onTabCha
         </button>
       ))}
     </nav>
-    <div className="p-4 border-t border-slate-800 space-y-2">
+    <div className="p-4 border-t border-slate-800 space-y-1">
+      <button
+        onClick={onExport}
+        title="Guarda tus datos y configuración en un archivo (copia de seguridad)"
+        className="w-full flex items-center justify-center lg:justify-start p-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors text-sm"
+      >
+        <span className="mr-2">💾</span><span className="hidden lg:inline">Exportar copia</span>
+      </button>
+      <label
+        title="Recupera tus datos desde una copia de seguridad exportada"
+        className="w-full flex items-center justify-center lg:justify-start p-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors text-sm cursor-pointer"
+      >
+        <span className="mr-2">📥</span><span className="hidden lg:inline">Restaurar copia</span>
+        <input type="file" accept=".json,application/json" onChange={onRestore} className="hidden" />
+      </label>
       <button onClick={onClear} className="w-full flex items-center justify-center lg:justify-start p-3 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors text-sm">
         <span className="mr-2">🗑️</span><span className="hidden lg:inline">Borrar Datos</span>
       </button>
+      <p className="text-center lg:text-left text-xs text-slate-600 px-1 pt-1" title="Versión de la aplicación">
+        v{__APP_VERSION__}
+      </p>
     </div>
   </aside>
 );
@@ -269,7 +378,11 @@ const OverviewTab = ({ data, selectedYear }: { data: DashboardData, selectedYear
 
   // Alert Data: Months where Expense > Threshold % Income
   const alerts = useMemo(() => {
-    return data.monthlyData.filter(m => m.expense > (m.income * (alertThreshold / 100)));
+    // Más recientes primero: lo último que ha pasado es lo más relevante.
+    return data.monthlyData
+      .filter(m => m.expense > (m.income * (alertThreshold / 100)))
+      .slice()
+      .reverse();
   }, [data, alertThreshold]);
 
   // F3: anomalías de gasto por categoría (desviación sobre la media histórica)
@@ -1184,7 +1297,8 @@ const GoalsTab = ({ data, settings, onChange }: { data: DashboardData, settings:
   const budgetMonth = months[safeBudgetIdx] || null;
 
   const goalRows = useMemo(
-    () => months.map((m) => ({ month: m, status: monthlyGoalStatus(m, goal) })),
+    // Más recientes primero: lo último que ha pasado es lo más relevante.
+    () => months.slice().reverse().map((m) => ({ month: m, status: monthlyGoalStatus(m, goal) })),
     [months, goal],
   );
 
@@ -1264,7 +1378,10 @@ const GoalsTab = ({ data, settings, onChange }: { data: DashboardData, settings:
                     <tr key={month.monthKey} className="hover:bg-slate-800/40">
                       <td className="py-3 text-slate-300 font-medium">{month.monthKey}</td>
                       <td className="py-3 text-right text-slate-400 font-mono">{formatEuro(status.target)}</td>
-                      <td className={`py-3 text-right font-mono font-bold ${s.text}`}>{formatEuro(status.actual)}</td>
+                      <td className={`py-3 text-right font-mono font-bold ${s.text}`}>
+                        {formatEuro(status.actual)}
+                        <span className="text-slate-500 font-normal ml-1">({formatPercent(month.savingsRate)})</span>
+                      </td>
                       <td className="py-3 pl-4">
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
@@ -1533,7 +1650,12 @@ const ComparatorTab = ({ data }: { data: DashboardData }) => {
   );
 };
 
-const UploadView = ({ isLoading, error, onUpload }: any) => (
+const UploadView = ({ isLoading, error, onUpload, onRestore }: {
+  isLoading: boolean,
+  error: string | null,
+  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void,
+  onRestore: (e: React.ChangeEvent<HTMLInputElement>) => void,
+}) => (
   <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
     <div className="absolute inset-0 bg-[linear-gradient(to_right,#4f46e51a_1px,transparent_1px),linear-gradient(to_bottom,#4f46e51a_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
     
@@ -1573,6 +1695,14 @@ const UploadView = ({ isLoading, error, onUpload }: any) => (
           >
             Descargar plantilla de ejemplo
           </button>
+        </div>
+
+        <div className="pt-1 text-center border-t border-slate-800 mt-2">
+          <p className="text-xs text-slate-500 mt-3 mb-1">¿Vienes de otro equipo o reinstalaste?</p>
+          <label className="text-sm text-slate-300 hover:text-white font-medium cursor-pointer underline-offset-4 hover:underline transition-colors">
+            Restaurar copia de seguridad
+            <input type="file" accept=".json,application/json" onChange={onRestore} className="hidden" />
+          </label>
         </div>
       </div>
     </div>

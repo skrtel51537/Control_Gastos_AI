@@ -12,6 +12,8 @@ declare global {
   interface Window {
     electronAPI?: ElectronAPI;
   }
+  // Inyectada por Vite (define) desde package.json al compilar.
+  const __APP_VERSION__: string;
 }
 
 export {};
