@@ -23,8 +23,11 @@ export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore }
         { id: 'OBJETIVOS', label: 'Objetivos y Presupuestos', icon: '🎯' }
       ].map((item) => (
         <button key={item.id} onClick={() => onTabChange(item.id as Tab)}
+          title={item.label}
+          aria-label={item.label}
+          aria-current={activeTab === item.id ? 'page' : undefined}
           className={`w-full flex items-center p-3 rounded-xl transition-all ${activeTab === item.id ? 'bg-indigo-600/10 text-indigo-400 font-medium border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-          <span className="mr-0 lg:mr-3 text-xl shrink-0">{item.icon}</span>
+          <span className="mr-0 lg:mr-3 text-xl shrink-0" aria-hidden="true">{item.icon}</span>
           <span className="hidden lg:block text-left leading-tight">{item.label}</span>
         </button>
       ))}
@@ -33,19 +36,24 @@ export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore }
       <button
         onClick={onExport}
         title="Guarda tus datos y configuración en un archivo (copia de seguridad)"
+        aria-label="Exportar copia de seguridad"
         className="w-full flex items-center justify-center lg:justify-start p-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors text-sm"
       >
-        <span className="mr-2">💾</span><span className="hidden lg:inline">Exportar copia</span>
+        <span className="mr-2" aria-hidden="true">💾</span><span className="hidden lg:inline">Exportar copia</span>
       </button>
       <label
         title="Recupera tus datos desde una copia de seguridad exportada"
         className="w-full flex items-center justify-center lg:justify-start p-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors text-sm cursor-pointer"
       >
-        <span className="mr-2">📥</span><span className="hidden lg:inline">Restaurar copia</span>
-        <input type="file" accept=".json,application/json" onChange={onRestore} className="hidden" />
+        <span className="mr-2" aria-hidden="true">📥</span><span className="hidden lg:inline">Restaurar copia</span>
+        <input type="file" accept=".json,application/json" onChange={onRestore} className="hidden" aria-label="Restaurar copia de seguridad" />
       </label>
-      <button onClick={onClear} className="w-full flex items-center justify-center lg:justify-start p-3 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors text-sm">
-        <span className="mr-2">🗑️</span><span className="hidden lg:inline">Borrar Datos</span>
+      <button
+        onClick={onClear}
+        aria-label="Borrar datos"
+        className="w-full flex items-center justify-center lg:justify-start p-3 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors text-sm"
+      >
+        <span className="mr-2" aria-hidden="true">🗑️</span><span className="hidden lg:inline">Borrar Datos</span>
       </button>
       <p className="text-center lg:text-left text-xs text-slate-600 px-1 pt-1" title="Versión de la aplicación">
         v{__APP_VERSION__}

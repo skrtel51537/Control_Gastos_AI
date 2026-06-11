@@ -26,7 +26,7 @@ const buildWorkbook = (
 };
 
 describe('parseExcelData', () => {
-  it('parsea ingresos, gastos y agrega por categoría', () => {
+  it('parsea ingresos, gastos y agrega por categoría', async () => {
     const buf = buildWorkbook([
       {
         name: 'Enero',
@@ -40,7 +40,7 @@ describe('parseExcelData', () => {
       },
     ]);
 
-    const data = parseExcelData(buf);
+    const data = await parseExcelData(buf);
     expect(data.monthlyData).toHaveLength(1);
     const m = data.monthlyData[0];
     expect(m.income).toBe(2000);
@@ -51,15 +51,15 @@ describe('parseExcelData', () => {
     expect(data.categories).toEqual(['Alimentación', 'Gastos fijos']);
   });
 
-  it('respeta el punto decimal (formato del usuario)', () => {
+  it('respeta el punto decimal (formato del usuario)', async () => {
     const buf = buildWorkbook([
       { name: 'Enero', b1: 'Enero 2025', income: 1000, rows: [[1234.56, 'Ocio', 'Cine']] },
     ]);
-    const data = parseExcelData(buf);
+    const data = await parseExcelData(buf);
     expect(data.monthlyData[0].expense).toBeCloseTo(1234.56, 2);
   });
 
-  it('ignora filas marcadas como TOTAL', () => {
+  it('ignora filas marcadas como TOTAL', async () => {
     const buf = buildWorkbook([
       {
         name: 'Enero',
@@ -71,23 +71,23 @@ describe('parseExcelData', () => {
         ],
       },
     ]);
-    const data = parseExcelData(buf);
+    const data = await parseExcelData(buf);
     expect(data.monthlyData[0].expense).toBe(100);
   });
 
-  it('ordena los meses cronológicamente entre hojas', () => {
+  it('ordena los meses cronológicamente entre hojas', async () => {
     const buf = buildWorkbook([
       { name: 'Marzo', b1: 'Marzo 2025', income: 1000, rows: [[100, 'Comida', 'Super']] },
       { name: 'Enero', b1: 'Enero 2025', income: 1000, rows: [[50, 'Comida', 'Super']] },
     ]);
-    const data = parseExcelData(buf);
+    const data = await parseExcelData(buf);
     expect(data.monthlyData.map((m) => m.monthKey)).toEqual(['ENE 25', 'MAR 25']);
   });
 
-  it('lanza error claro si no hay datos', () => {
+  it('lanza error claro si no hay datos', async () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['vacío']]), 'Hoja');
     const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-    expect(() => parseExcelData(buf)).toThrow(/No se encontraron datos/);
+    await expect(parseExcelData(buf)).rejects.toThrow(/No se encontraron datos/);
   });
 });

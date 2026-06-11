@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
 import { DashboardData, Tab } from '../types';
 import { processExcelFile } from '../utils/excelParser';
 import { loadJSON, saveJSON, removeKey, hasKey } from '../utils/storage';
@@ -7,12 +7,15 @@ import { FinanceSettings, DEFAULT_SETTINGS } from '../utils/finance';
 import { Sidebar } from './ui/Sidebar';
 import { Header } from './ui/Header';
 import { UploadView } from './ui/UploadView';
-import { OverviewTab } from './tabs/OverviewTab';
-import { MonthlyTab } from './tabs/MonthlyTab';
-import { CategoriesTab } from './tabs/CategoriesTab';
-import { TrendsTab } from './tabs/TrendsTab';
-import { ComparatorTab } from './tabs/ComparatorTab';
-import { GoalsTab } from './tabs/GoalsTab';
+
+// Las pestañas (y con ellas la librería de gráficas) se cargan bajo demanda:
+// acelera el arranque y la pantalla inicial de carga de Excel.
+const OverviewTab = lazy(() => import('./tabs/OverviewTab').then((m) => ({ default: m.OverviewTab })));
+const MonthlyTab = lazy(() => import('./tabs/MonthlyTab').then((m) => ({ default: m.MonthlyTab })));
+const CategoriesTab = lazy(() => import('./tabs/CategoriesTab').then((m) => ({ default: m.CategoriesTab })));
+const TrendsTab = lazy(() => import('./tabs/TrendsTab').then((m) => ({ default: m.TrendsTab })));
+const ComparatorTab = lazy(() => import('./tabs/ComparatorTab').then((m) => ({ default: m.ComparatorTab })));
+const GoalsTab = lazy(() => import('./tabs/GoalsTab').then((m) => ({ default: m.GoalsTab })));
 
 const DATA_KEY = 'finance_data_v3';
 const SETTINGS_KEY = 'finance_settings_v1';
@@ -216,12 +219,14 @@ export const DashboardPrototype: React.FC = () => {
                 </button>
               </div>
             )}
-            {activeTab === 'RESUMEN' && <OverviewTab data={filteredData} selectedYear={selectedYear} />}
-            {activeTab === 'MENSUAL' && <MonthlyTab data={filteredData} settings={settings} />}
-            {activeTab === 'CATEGORIAS' && <CategoriesTab data={filteredData} />}
-            {activeTab === 'TENDENCIAS' && <TrendsTab data={filteredData} />}
-            {activeTab === 'COMPARAR' && <ComparatorTab data={rawData!} />}
-            {activeTab === 'OBJETIVOS' && <GoalsTab data={filteredData} settings={settings} onChange={updateSettings} />}
+            <Suspense fallback={<div className="p-8 text-center text-slate-500 animate-pulse">Cargando…</div>}>
+              {activeTab === 'RESUMEN' && <OverviewTab data={filteredData} selectedYear={selectedYear} />}
+              {activeTab === 'MENSUAL' && <MonthlyTab data={filteredData} settings={settings} />}
+              {activeTab === 'CATEGORIAS' && <CategoriesTab data={filteredData} />}
+              {activeTab === 'TENDENCIAS' && <TrendsTab data={filteredData} />}
+              {activeTab === 'COMPARAR' && <ComparatorTab data={rawData!} />}
+              {activeTab === 'OBJETIVOS' && <GoalsTab data={filteredData} settings={settings} onChange={updateSettings} />}
+            </Suspense>
           </div>
         </div>
       </main>

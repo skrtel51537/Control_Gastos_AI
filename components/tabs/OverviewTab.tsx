@@ -47,6 +47,7 @@ export const OverviewTab = ({ data, selectedYear }: { data: DashboardData, selec
 
   // F3: anomalías de gasto por categoría (desviación sobre la media histórica)
   const anomalies = useMemo(() => detectAnomalies(data), [data]);
+  const [showAllAnomalies, setShowAllAnomalies] = useState(false);
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -126,7 +127,7 @@ export const OverviewTab = ({ data, selectedYear }: { data: DashboardData, selec
           </div>
           <p className="text-sm text-slate-500 mb-5">Meses y categorías cuyo gasto se desvía claramente al alza respecto a tu media histórica.</p>
           <div className="space-y-3">
-            {anomalies.slice(0, 6).map((a, i) => (
+            {(showAllAnomalies ? anomalies : anomalies.slice(0, 6)).map((a, i) => (
               <div key={`${a.monthKey}-${a.category}-${i}`} className="flex flex-wrap items-center justify-between gap-2 bg-slate-800/40 rounded-lg px-4 py-3">
                 <div>
                   <span className="text-slate-200 font-medium">{a.category}</span>
@@ -140,6 +141,14 @@ export const OverviewTab = ({ data, selectedYear }: { data: DashboardData, selec
               </div>
             ))}
           </div>
+          {anomalies.length > 6 && (
+            <button
+              onClick={() => setShowAllAnomalies(!showAllAnomalies)}
+              className="mt-4 text-sm text-indigo-400 hover:text-indigo-300 font-medium underline-offset-4 hover:underline"
+            >
+              {showAllAnomalies ? 'Ver menos' : `Ver los ${anomalies.length - 6} restantes`}
+            </button>
+          )}
         </div>
       )}
 

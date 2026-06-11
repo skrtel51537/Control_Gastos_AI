@@ -15,9 +15,10 @@ export const Header = ({ activeTab, years, selectedYear, onYearChange }: { activ
     <div className="flex items-center gap-4">
       <div className="flex items-center bg-slate-800 rounded-lg p-1 border border-slate-700">
         <span className="text-xs text-slate-400 px-2 font-medium uppercase hidden sm:inline">Año:</span>
-        <select 
-          value={selectedYear} 
+        <select
+          value={selectedYear}
           onChange={(e) => onYearChange(e.target.value)}
+          aria-label="Filtrar por año"
           className="bg-transparent text-sm font-bold text-white outline-none cursor-pointer py-1 px-2 rounded hover:bg-slate-700"
         >
           <option value="TOTAL" className="bg-slate-900">Total (Todos)</option>

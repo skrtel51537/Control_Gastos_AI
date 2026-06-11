@@ -99,6 +99,9 @@ export const ComparatorTab = ({ data }: { data: DashboardData }) => {
 
   return (
     <div className="space-y-6">
+      <p className="text-xs text-slate-500">
+        ℹ️ El comparador siempre usa todos tus datos: el filtro de año de la barra superior no se aplica en esta pestaña.
+      </p>
       {/* Controles */}
       <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800 flex flex-wrap items-end gap-6">
         <div>

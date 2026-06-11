@@ -15,7 +15,6 @@ import { KPIBox } from '../ui/KPIBox';
 export const TrendsTab = ({ data }: { data: DashboardData }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [selectedSubcat, setSelectedSubcat] = useState<string | null>(null);
-  const [isSubcatDropdownOpen, setIsSubcatDropdownOpen] = useState(false);
 
   // 1. Categories
   const categories = useMemo(() => data.categories, [data]);
@@ -93,36 +92,20 @@ export const TrendsTab = ({ data }: { data: DashboardData }) => {
              </div>
           </div>
 
-          {/* Subcategory Single Select Dropdown */}
-          <div className="relative min-w-[220px]">
-             <h3 className="text-xs font-bold text-slate-500 uppercase mb-2">Subcategoría (Opcional)</h3>
-             <button 
-               onClick={() => setIsSubcatDropdownOpen(!isSubcatDropdownOpen)}
-               className="w-full bg-slate-800 border border-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm flex justify-between items-center hover:bg-slate-700 transition-colors"
+          {/* Subcategoría: select nativo (accesible con teclado y lector de pantalla) */}
+          <div className="min-w-[220px]">
+             <label htmlFor="subcat-select" className="text-xs font-bold text-slate-500 uppercase mb-2 block">Subcategoría (Opcional)</label>
+             <select
+               id="subcat-select"
+               value={selectedSubcat ?? ''}
+               onChange={(e) => setSelectedSubcat(e.target.value || null)}
+               className="w-full bg-slate-800 border border-slate-700 text-slate-200 px-4 py-2 rounded-lg text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
              >
-               <span className="truncate font-medium text-slate-200">{selectedSubcat || 'Total Categoría'}</span>
-               <span className="text-xs ml-2">▼</span>
-             </button>
-             
-             {isSubcatDropdownOpen && (
-               <div className="absolute top-full left-0 mt-2 w-full bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-20 max-h-60 overflow-y-auto p-1">
-                  <button 
-                    onClick={() => { setSelectedSubcat(null); setIsSubcatDropdownOpen(false); }}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 ${!selectedSubcat ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}
-                  >
-                    Total Categoría
-                  </button>
-                  {subcategories.map(sub => (
-                    <button 
-                       key={sub}
-                       onClick={() => { setSelectedSubcat(sub); setIsSubcatDropdownOpen(false); }}
-                       className={`w-full text-left px-3 py-2 rounded-lg text-sm mb-1 ${selectedSubcat === sub ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-700'}`}
-                    >
-                       {sub}
-                    </button>
-                  ))}
-               </div>
-             )}
+               <option value="" className="bg-slate-900">Total Categoría</option>
+               {subcategories.map(sub => (
+                 <option key={sub} value={sub} className="bg-slate-900">{sub}</option>
+               ))}
+             </select>
           </div>
        </div>
 

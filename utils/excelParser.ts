@@ -1,5 +1,13 @@
-import * as XLSX from 'xlsx';
+import type * as XLSXType from 'xlsx';
 import { Transaction, DashboardData, MonthlySummary } from '../types';
+
+// xlsx es la dependencia más pesada de la app y solo hace falta al cargar o
+// descargar un Excel: se importa bajo demanda para acelerar el arranque.
+const loadXLSX = async () => await import('xlsx');
+
+// Límite de tamaño del archivo: un Excel de gastos real ocupa unos pocos MB;
+// algo mucho mayor probablemente es un archivo equivocado y congelaría la app.
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
 // Diccionario ampliado para soportar abreviaturas y variaciones comunes
 const SPANISH_MONTHS: Record<string, number> = {
@@ -27,8 +35,9 @@ const normalizeText = (text: string): string => {
 };
 
 // Lógica pura de parseo (sin FileReader) para poder probarla con tests.
-export const parseExcelData = (data: ArrayBuffer | Uint8Array): DashboardData => {
-  let workbook: XLSX.WorkBook;
+export const parseExcelData = async (data: ArrayBuffer | Uint8Array): Promise<DashboardData> => {
+  const XLSX = await loadXLSX();
+  let workbook: XLSXType.WorkBook;
   try {
     workbook = XLSX.read(data, { type: 'array', cellDates: true });
   } catch {
@@ -58,17 +67,18 @@ export const parseExcelData = (data: ArrayBuffer | Uint8Array): DashboardData =>
 };
 
 export const processExcelFile = async (file: File): Promise<DashboardData> => {
+  if (file.size > MAX_FILE_SIZE) {
+    throw new Error(
+      'El archivo es demasiado grande (más de 50 MB). Comprueba que sea el Excel de gastos correcto.'
+    );
+  }
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
     reader.onload = (e) => {
-      try {
-        const result = e.target?.result;
-        resolve(parseExcelData(result as ArrayBuffer));
-      } catch (error) {
-        console.error("Error parsing Excel:", error);
-        reject(error);
-      }
+      const result = e.target?.result;
+      // resolve adopta la promesa: si el parseo falla, el error llega al llamador.
+      resolve(parseExcelData(result as ArrayBuffer));
     };
 
     reader.onerror = (error) => reject(error);
@@ -76,7 +86,7 @@ export const processExcelFile = async (file: File): Promise<DashboardData> => {
   });
 };
 
-const parseSheet = (sheet: XLSX.WorkSheet, sheetName: string): Transaction[] => {
+const parseSheet = (sheet: XLSXType.WorkSheet, sheetName: string): Transaction[] => {
     const transactions: Transaction[] = [];
     let globalDate: Date | null = null;
     
@@ -111,7 +121,8 @@ const parseSheet = (sheet: XLSX.WorkSheet, sheetName: string): Transaction[] => 
     const cellB4 = sheet['B4'];
     if (cellB4 && cellB4.v) {
       const incomeAmount = parseFloat(cellB4.v);
-      if (!isNaN(incomeAmount) && incomeAmount > 0) {
+      // Number.isFinite descarta NaN e infinitos (celdas corruptas).
+      if (Number.isFinite(incomeAmount) && incomeAmount > 0) {
         transactions.push({
           id: `${sheetName}-inc`,
           date: isoDate,
@@ -142,8 +153,8 @@ const parseSheet = (sheet: XLSX.WorkSheet, sheetName: string): Transaction[] => 
       let hasData = false;
       if (amountCell && amountCell.v != null) {
         const amount = parseFloat(amountCell.v);
-        
-        if (!isNaN(amount) && amount !== 0) {
+
+        if (Number.isFinite(amount) && amount !== 0) {
           hasData = true;
           consecutiveEmptyRows = 0; // Reiniciar contador de vacíos
 
@@ -312,7 +323,8 @@ export const getDemoData = (): DashboardData => {
     return buildDashboardData(transactions);
 };
 
-export const downloadSampleExcel = () => {
+export const downloadSampleExcel = async () => {
+    const XLSX = await loadXLSX();
     const wb = XLSX.utils.book_new();
     const wsData = Array.from({ length: 42 }, () => Array(8).fill(''));
     

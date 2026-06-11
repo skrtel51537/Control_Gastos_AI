@@ -44,6 +44,26 @@ npm run electron:build:win
 
 El instalador se genera en la carpeta `dist-electron/`.
 
+## Publicar una versión nueva (release)
+
+La publicación está automatizada con GitHub Actions:
+
+1. Subir el número de versión en `package.json` y `package-lock.json`.
+2. Hacer commit y push a `main` (tras validar los cambios).
+3. Crear y subir la etiqueta de versión:
+
+   ```bash
+   git tag v1.1.0
+   git push origin v1.1.0
+   ```
+
+4. GitHub compila el instalador, lo sube a la release y **la publica**
+   (pestaña *Actions* para seguir el progreso). El auto-updater de las
+   apps instaladas hace el resto.
+
+Además, en cada push se ejecutan automáticamente los tests, la comprobación
+de tipos y la auditoría de dependencias (workflow de CI).
+
 ## Calidad y seguridad de dependencias
 
 Comprobación de tipos y tests automáticos:

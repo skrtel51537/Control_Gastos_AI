@@ -1,0 +1,51 @@
+# Publicación automática: al subir una etiqueta de versión (ej. v1.1.0),
+# GitHub compila el instalador de Windows, lo sube a la release y la publica.
+#
+# Procedimiento completo para sacar versión nueva:
+#   1. Subir el número de versión en package.json y package-lock.json.
+#   2. Commit + push a main (tras validar).
+#   3. git tag v1.1.0 && git push origin v1.1.0
+#   4. Esperar a que este workflow termine (pestaña Actions): la release queda
+#      PUBLICADA (no en borrador) y el auto-updater la distribuye solo.
+#
+# Usa el token automático de GitHub Actions: no hace falta crear ningún
+# Personal Access Token.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  publicar:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Comprobaciones (tipos y tests)
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Compilar y subir instalador a la release
+        run: npm run electron:build:win -- --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # electron-builder crea la release como BORRADOR: hay que publicarla
+      # para que el auto-updater de las apps instaladas la vea.
+      - name: Publicar la release (quitar borrador)
+        run: gh release edit "${{ github.ref_name }}" --draft=false
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
