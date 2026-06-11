@@ -34,10 +34,5 @@ export interface DashboardData {
   categoryHierarchy: Record<string, string[]>; // Map Cat 1 -> List of Cat 2
 }
 
-export interface ChartDataPoint {
-  name: string;
-  value?: number;
-  income?: number;
-  expense?: number;
-  [key: string]: any;
-}
+// Tipo de pestaña activa del dashboard (navegación del menú lateral).
+export type Tab = 'RESUMEN' | 'MENSUAL' | 'CATEGORIAS' | 'TENDENCIAS' | 'COMPARAR' | 'OBJETIVOS';
