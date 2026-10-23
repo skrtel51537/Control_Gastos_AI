@@ -82,7 +82,7 @@ export const CategoriesTab = ({ data }: { data: DashboardData }) => {
                     dataKey="value" 
                     isAnimationActive={true}
                     paddingAngle={2}
-                    onClick={(data) => setActiveCategory(data.name)}
+                    onClick={(data) => data.name && setActiveCategory(data.name)}
                     style={{ cursor: 'pointer' }}
                  >
                    {allCategoriesData.map((e, i) => <Cell key={`c-${i}`} fill={e.color} stroke="#0f172a" strokeWidth={2} style={{ outline: 'none' }} />)}
@@ -90,7 +90,7 @@ export const CategoriesTab = ({ data }: { data: DashboardData }) => {
                  <Tooltip 
                     contentStyle={CHART_TOOLTIP.contentStyle} 
                     itemStyle={CHART_TOOLTIP.itemStyle}
-                    formatter={(val: number) => formatEuro(val)}
+                    formatter={(val) => formatEuro(Number(val))}
                  />
                  <Legend wrapperStyle={{fontSize: '11px'}} />
                </PieChart>
@@ -142,7 +142,7 @@ export const CategoriesTab = ({ data }: { data: DashboardData }) => {
                     cursor={CHART_TOOLTIP.cursor}
                     contentStyle={CHART_TOOLTIP.contentStyle}
                     itemStyle={CHART_TOOLTIP.itemStyle}
-                    formatter={(val: number) => formatEuro(val)}
+                    formatter={(val) => formatEuro(Number(val))}
                  />
                  <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                    {categoryData.map((entry, index) => (

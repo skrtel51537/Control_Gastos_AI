@@ -1,6 +1,8 @@
 # Integración continua: en cada push o pull request se comprueban tipos,
-# tests y vulnerabilidades de las dependencias que viajan dentro de la app.
-# Si algo falla, GitHub marca el commit con una X roja.
+# tests, vulnerabilidades de las dependencias y que Electron siga teniendo
+# soporte. Además se ejecuta cada lunes aunque no haya cambios, para enterarse
+# de fallos de seguridad nuevos. Si algo falla, GitHub marca el commit con una
+# X roja y avisa por email.
 name: CI
 
 on:
@@ -8,16 +10,28 @@ on:
     branches: ['**']
   pull_request:
     branches: [main]
+  schedule:
+    - cron: '0 7 * * 1' # lunes a las 07:00 UTC
+  workflow_dispatch:
+
+# Solo lectura: este workflow no necesita modificar nada del repositorio.
+permissions:
+  contents: read
 
 jobs:
   calidad:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      # Acciones fijadas por SHA (la etiqueta va en el comentario): una etiqueta
+      # se puede mover, un SHA no. Dependabot las mantiene al día.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          check-latest: true
           cache: npm
 
       - name: Instalar dependencias
@@ -34,3 +48,7 @@ jobs:
 
       - name: Vulnerabilidades en dependencias de la app
         run: npm audit --omit=dev
+
+      # npm audit no revisa Electron (es devDependency aunque va en el instalador).
+      - name: Electron con soporte de seguridad
+        run: node scripts/check-electron-support.mjs

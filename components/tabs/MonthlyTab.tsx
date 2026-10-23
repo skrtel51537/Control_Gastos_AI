@@ -346,7 +346,7 @@ export const MonthlyTab = ({ data, settings }: { data: DashboardData, settings: 
                     isAnimationActive={true}
                     paddingAngle={2}
                     onClick={(data) => {
-                         if (!drilldownCategory) {
+                         if (!drilldownCategory && data.name) {
                               setDrilldownCategory(data.name);
                          }
                     }}
@@ -357,7 +357,7 @@ export const MonthlyTab = ({ data, settings }: { data: DashboardData, settings: 
                  <Tooltip 
                     contentStyle={CHART_TOOLTIP.contentStyle} 
                     itemStyle={CHART_TOOLTIP.itemStyle}
-                    formatter={(val: number) => formatEuro(val)}
+                    formatter={(val) => formatEuro(Number(val))}
                  />
                  <Legend wrapperStyle={{fontSize: '12px'}} />
                </PieChart>

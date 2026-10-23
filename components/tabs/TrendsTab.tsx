@@ -128,7 +128,7 @@ export const TrendsTab = ({ data }: { data: DashboardData }) => {
              <Tooltip 
                 contentStyle={CHART_TOOLTIP.contentStyle} 
                 itemStyle={CHART_TOOLTIP.itemStyle}
-                formatter={(val: number) => [formatEuro(val), currentLabel]}
+                formatter={(val) => [formatEuro(Number(val)), currentLabel]}
              />
              <Legend />
              {/* Single Line based on selection */}

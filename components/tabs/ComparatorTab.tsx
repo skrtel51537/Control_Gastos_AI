@@ -156,7 +156,7 @@ export const ComparatorTab = ({ data }: { data: DashboardData }) => {
                   cursor={CHART_TOOLTIP.cursor}
                   contentStyle={CHART_TOOLTIP.contentStyle}
                   itemStyle={CHART_TOOLTIP.itemStyle}
-                  formatter={(v: number) => formatEuro(v)}
+                  formatter={(v) => formatEuro(Number(v))}
                 />
                 <Legend />
                 <Bar dataKey="a" name={aggA.label} fill="#6366f1" radius={[0, 4, 4, 0]} />

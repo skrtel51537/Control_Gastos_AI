@@ -1,0 +1,26 @@
+# Dependabot: propone actualizaciones de dependencias una vez al mes.
+# Cada propuesta llega como pull request y pasa el CI antes de fusionarla;
+# nada se instala solo. Los avisos de seguridad urgentes llegan aparte, por
+# email, en cuanto GitHub los detecta (alertas de Dependabot del repositorio).
+version: 2
+updates:
+  # Librerías de la app y herramientas de compilación (package.json).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      # Las versiones menores y parches van juntos en un solo pull request.
+      # Las versiones mayores (cambios incompatibles) llegan por separado.
+      menores:
+        update-types: [minor, patch]
+
+  # Acciones de GitHub usadas en los workflows (.github/workflows).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      acciones:
+        patterns: ['*']

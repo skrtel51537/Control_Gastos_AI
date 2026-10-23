@@ -175,7 +175,7 @@ export const OverviewTab = ({ data, selectedYear }: { data: DashboardData, selec
                 <Tooltip 
                   contentStyle={CHART_TOOLTIP.contentStyle} 
                   itemStyle={CHART_TOOLTIP.itemStyle} 
-                  formatter={(val: number) => formatEuro(val)} 
+                  formatter={(val) => formatEuro(Number(val))} 
                 />
                 <Area type="monotone" dataKey="Acumulado" stroke="#6366f1" fill="url(#colSav)" strokeWidth={3} isAnimationActive={false} />
               </AreaChart>

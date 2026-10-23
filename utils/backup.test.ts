@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { DashboardData } from '../types';
-import { buildBackup, parseBackup, backupFilename } from './backup';
+import { buildBackup, parseBackup, backupFilename, sanitizeSettings } from './backup';
 import { DEFAULT_SETTINGS } from './finance';
 
 const sampleData: DashboardData = {
@@ -72,5 +72,39 @@ describe('backup', () => {
 
   it('genera nombres de archivo con la fecha del día', () => {
     expect(backupFilename(new Date('2026-06-11T10:00:00'))).toBe('copia-gastos-2026-06-11.json');
+  });
+});
+
+describe('sanitizeSettings', () => {
+  it('conserva una configuración válida tal cual', () => {
+    const settings = { savingsGoal: { type: 'percent', value: 20 }, categoryBudgets: { Ocio: 150, Comida: 400.5 } };
+    expect(sanitizeSettings(settings)).toEqual(settings);
+  });
+
+  it('devuelve null si la configuración no es un objeto', () => {
+    expect(sanitizeSettings(null)).toBeNull();
+    expect(sanitizeSettings('texto')).toBeNull();
+    expect(sanitizeSettings([1, 2])).toBeNull();
+  });
+
+  it('descarta objetivos de ahorro con formato incorrecto', () => {
+    expect(sanitizeSettings({ savingsGoal: { type: 'otro', value: 10 } })!.savingsGoal).toBeNull();
+    expect(sanitizeSettings({ savingsGoal: { type: 'amount', value: '500' } })!.savingsGoal).toBeNull();
+    expect(sanitizeSettings({ savingsGoal: { type: 'amount', value: -5 } })!.savingsGoal).toBeNull();
+    expect(sanitizeSettings({ savingsGoal: { type: 'percent', value: 150 } })!.savingsGoal).toBeNull();
+  });
+
+  it('descarta presupuestos no numéricos, negativos o con claves peligrosas', () => {
+    const raw = JSON.parse(
+      '{"categoryBudgets": {"Ocio": 100, "Viajes": "mucho", "Ropa": -20, "Luz": null, "": 5, "__proto__": 1, "constructor": 2}}',
+    );
+    const result = sanitizeSettings(raw)!;
+    expect(result.categoryBudgets).toEqual({ Ocio: 100 });
+    expect(Object.getPrototypeOf(result.categoryBudgets)).toBe(Object.prototype);
+  });
+
+  it('se aplica al restaurar una copia', () => {
+    const backup = { ...buildBackup(null, DEFAULT_SETTINGS), settings: { savingsGoal: 'x', categoryBudgets: { Ocio: 'y' } } };
+    expect(parseBackup(JSON.stringify(backup)).settings).toEqual(DEFAULT_SETTINGS);
   });
 });
