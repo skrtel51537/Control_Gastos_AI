@@ -7,6 +7,7 @@ import { FinanceSettings, DEFAULT_SETTINGS } from '../utils/finance';
 import { Sidebar } from './ui/Sidebar';
 import { Header } from './ui/Header';
 import { UploadView } from './ui/UploadView';
+import { AboutPanel } from './ui/AboutPanel';
 
 // Las pestañas (y con ellas la librería de gráficas) se cargan bajo demanda:
 // acelera el arranque y la pantalla inicial de carga de Excel.
@@ -39,6 +40,7 @@ export const DashboardPrototype: React.FC = () => {
   // Avisos de almacenamiento (guardado fallido, etc.) visibles dentro del dashboard.
   const [storageWarning, setStorageWarning] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('RESUMEN');
+  const [showAbout, setShowAbout] = useState(false);
 
   // Year Filter State
   const [selectedYear, setSelectedYear] = useState<string>('TOTAL');
@@ -196,8 +198,9 @@ export const DashboardPrototype: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-slate-950 overflow-hidden text-slate-200 font-sans">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onClear={clearData} onExport={exportBackup} onRestore={restoreBackup} />
-      
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onClear={clearData} onExport={exportBackup} onRestore={restoreBackup} onAbout={() => setShowAbout(true)} />
+      {showAbout && <AboutPanel onClose={() => setShowAbout(false)} />}
+
       <main className="flex-1 flex flex-col overflow-hidden relative">
         <Header 
           activeTab={activeTab} 

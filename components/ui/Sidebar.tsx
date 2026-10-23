@@ -1,12 +1,13 @@
 import React from 'react';
 import type { Tab } from '../../types';
 
-export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore }: {
+export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore, onAbout }: {
   activeTab: Tab,
   onTabChange: (t: Tab) => void,
   onClear: () => void,
   onExport: () => void,
   onRestore: (e: React.ChangeEvent<HTMLInputElement>) => void,
+  onAbout: () => void,
 }) => (
   <aside className="w-20 lg:w-64 border-r border-slate-800 bg-slate-900/50 flex flex-col hidden sm:flex">
     <div className="h-16 flex items-center justify-center lg:justify-start lg:px-6 border-b border-slate-800">
@@ -55,9 +56,14 @@ export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore }
       >
         <span className="mr-2" aria-hidden="true">🗑️</span><span className="hidden lg:inline">Borrar Datos</span>
       </button>
-      <p className="text-center lg:text-left text-xs text-slate-600 px-1 pt-1" title="Versión de la aplicación">
-        v{__APP_VERSION__}
-      </p>
+      <button
+        onClick={onAbout}
+        title="Versión de la aplicación y actualizaciones"
+        aria-label={`Acerca de (versión ${__APP_VERSION__})`}
+        className="w-full flex items-center justify-center lg:justify-start px-3 py-2 rounded-xl text-xs text-slate-500 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+      >
+        <span className="mr-0 lg:mr-2" aria-hidden="true">ℹ️</span><span className="hidden lg:inline">Acerca de · v{__APP_VERSION__}</span>
+      </button>
     </div>
   </aside>
 );

@@ -9,8 +9,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onUpdateDownloaded: (callback) => {
         ipcRenderer.on('update_downloaded', () => callback());
     },
+    // Estado del actualizador (comprobando, descargando, error…). Devuelve una
+    // función para dejar de escuchar.
+    onUpdateStatus: (callback) => {
+        const listener = (_event, status) => callback(status);
+        ipcRenderer.on('update_status', listener);
+        return () => ipcRenderer.removeListener('update_status', listener);
+    },
     restartApp: () => ipcRenderer.send('restart_app'),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    getAppInfo: () => ipcRenderer.invoke('get-app-info'),
     // Cifrado local de datos financieros
     isEncryptionAvailable: () => ipcRenderer.invoke('secure-available'),
     encrypt: (plain) => ipcRenderer.invoke('secure-encrypt', plain),
