@@ -19,13 +19,16 @@ los datos financieros **se quedan en tu equipo** y no se envían a ningún servi
 - Filtro por año.
 - Copia de seguridad: exporta tus datos y configuración a un archivo y
   restáuralos en cualquier equipo (útil al cambiar de ordenador o reinstalar).
+- Panel **Acerca de** (barra lateral): versión instalada, botón para buscar
+  actualizaciones y resultado de la última comprobación, con los errores
+  explicados.
 
 Los datos guardados (incluidos objetivos y presupuestos) se **cifran en local**
 con el almacén seguro del sistema operativo en la app de escritorio.
 
 ## Requisitos
 
-- [Node.js](https://nodejs.org/) (versión 18 o superior).
+- [Node.js](https://nodejs.org/) 24 (la misma rama que usa Electron por dentro).
 
 ## Desarrollo
 
@@ -57,12 +60,16 @@ La publicación está automatizada con GitHub Actions:
    git push origin v1.1.0
    ```
 
-4. GitHub compila el instalador, lo sube a la release y **la publica**
-   (pestaña *Actions* para seguir el progreso). El auto-updater de las
+4. GitHub crea la release en borrador, compila el instalador, comprueba que
+   estén los 3 archivos (`.exe`, `.blockmap` y `latest.yml`) y **la publica**
+   (pestaña *Actions* para seguir el progreso). Si falta algún archivo, la
+   release se queda en borrador y no llega a nadie. El auto-updater de las
    apps instaladas hace el resto.
 
-Además, en cada push se ejecutan automáticamente los tests, la comprobación
-de tipos y la auditoría de dependencias (workflow de CI).
+Además, en cada push y **cada lunes** (aunque no haya cambios) se ejecutan
+automáticamente los tests, la comprobación de tipos, la auditoría de
+dependencias y la comprobación de soporte de Electron (workflow de CI). Si
+algo falla, GitHub avisa por email.
 
 ## Calidad y seguridad de dependencias
 
@@ -83,9 +90,42 @@ npm audit --omit=dev   # Solo lo que viaja dentro de la app (lo importante)
 npm audit              # Incluye herramientas de desarrollo (no se distribuyen)
 ```
 
-Lo relevante para la seguridad de los equipos es `--omit=dev`: son las dependencias
-que se empaquetan en la app. Las alertas que aparecen sin ese filtro suelen estar en
-herramientas que solo se usan al desarrollar/compilar y **no** llegan al usuario final.
+`--omit=dev` revisa las librerías que se empaquetan en la app. Las alertas que
+aparecen sin ese filtro suelen estar en herramientas que solo se usan al
+desarrollar o compilar y **no** llegan al usuario final.
+
+**Excepción importante: Electron.** Figura como dependencia de desarrollo, pero su
+motor (Chromium + Node.js) **sí va dentro del instalador**, y `npm audit --omit=dev`
+no lo revisa. Por eso hay una comprobación aparte, que también ejecuta el CI:
+
+```bash
+node scripts/check-electron-support.mjs
+```
+
+Falla si la versión de Electron ya no recibe parches de seguridad (Electron solo
+mantiene sus 3 últimas versiones mayores) y avisa cuando le queda poco o hay una
+versión más nueva de su rama.
+
+**Avisos automáticos:** Dependabot (`.github/dependabot.yml`) propone cada mes las
+actualizaciones de dependencias y de las acciones de GitHub como pull requests,
+que pasan el CI antes de fusionarse. Las alertas de seguridad urgentes llegan por
+email desde la pestaña *Security* del repositorio.
+
+## Medidas de seguridad de la app
+
+- Ventana aislada (`contextIsolation`, `sandbox`, sin Node en la interfaz) y política
+  de contenido (CSP) sin recursos remotos.
+- Navegación, ventanas nuevas y permisos (cámara, micrófono…) bloqueados.
+- Los mensajes entre la interfaz y el proceso principal solo se aceptan desde la
+  propia ventana de la app.
+- Datos cifrados en local con el almacén seguro del sistema (`safeStorage`).
+- **Electron Fuses** en el instalador: el `.exe` no puede usarse como intérprete de
+  Node (`ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS` y `--inspect` desactivados) y se
+  exige la integridad del código empaquetado (`app.asar`). Para comprobarlas:
+
+  ```bash
+  npx @electron/fuses read --app "dist-electron/win-unpacked/Dashboard Gastos.exe"
+  ```
 
 ## Actualizaciones automáticas (sin firma de código)
 
