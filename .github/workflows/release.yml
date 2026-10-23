@@ -38,13 +38,48 @@ jobs:
           npm run typecheck
           npm test
 
+      # Crear la release en borrador ANTES de compilar. Si no existe,
+      # electron-builder sube el instalador y el .blockmap a la vez y cada
+      # subida crea su propia release (pasó en la v1.2.0). Con el borrador ya
+      # creado, todas las subidas lo encuentran y van a la misma release.
+      - name: Crear la release en borrador
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "La release $TAG ya existe; se reutiliza."
+          else
+            gh release create "$TAG" --draft --title "${TAG#v}" --generate-notes
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Compilar y subir instalador a la release
         run: npm run electron:build:win -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # electron-builder crea la release como BORRADOR: hay que publicarla
-      # para que el auto-updater de las apps instaladas la vea.
+      # Antes de publicar, comprobar que la release tiene los 3 archivos que
+      # necesita el auto-updater. Si falta alguno, el job falla y la release
+      # se queda en borrador (las apps instaladas no la ven).
+      - name: Comprobar archivos de la release
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          ASSETS=$(gh release view "$TAG" --json assets --jq '.assets[].name')
+          echo "$ASSETS"
+          for f in "Dashboard-Gastos-Setup-$VERSION.exe" "Dashboard-Gastos-Setup-$VERSION.exe.blockmap" "latest.yml"; do
+            if ! grep -qxF "$f" <<< "$ASSETS"; then
+              echo "::error::Falta $f en la release $TAG"
+              exit 1
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # La release se ha creado como BORRADOR: hay que publicarla para que el
+      # auto-updater de las apps instaladas la vea.
       - name: Publicar la release (quitar borrador)
         run: gh release edit "${{ github.ref_name }}" --draft=false
         env:
