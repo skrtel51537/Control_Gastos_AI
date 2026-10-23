@@ -110,15 +110,20 @@ ipcMain.handle('check-for-updates', () => {
     return autoUpdater.checkForUpdatesAndNotify();
 });
 
-// Cifrado local de datos financieros mediante el almacén seguro del sistema
-ipcMain.handle('secure-available', () => safeStorage.isEncryptionAvailable());
+// Cifrado local de datos financieros mediante el almacén seguro del sistema.
+// Se usan las funciones asíncronas: las síncronas están obsoletas desde
+// Electron 45 y desaparecen en la 46. Lo cifrado con las antiguas se sigue
+// pudiendo descifrar con las nuevas.
+ipcMain.handle('secure-available', () => safeStorage.isAsyncEncryptionAvailable());
 
-ipcMain.handle('secure-encrypt', (_event, plain) => {
-    if (!safeStorage.isEncryptionAvailable() || typeof plain !== 'string') return null;
-    return safeStorage.encryptString(plain).toString('base64');
+ipcMain.handle('secure-encrypt', async (_event, plain) => {
+    if (typeof plain !== 'string' || !(await safeStorage.isAsyncEncryptionAvailable())) return null;
+    return (await safeStorage.encryptStringAsync(plain)).toString('base64');
 });
 
-ipcMain.handle('secure-decrypt', (_event, b64) => {
-    if (!safeStorage.isEncryptionAvailable() || typeof b64 !== 'string') return null;
-    return safeStorage.decryptString(Buffer.from(b64, 'base64'));
+ipcMain.handle('secure-decrypt', async (_event, b64) => {
+    if (typeof b64 !== 'string' || !(await safeStorage.isAsyncEncryptionAvailable())) return null;
+    const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(b64, 'base64'));
+    if (shouldReEncrypt) log.info('safeStorage: la clave ha cambiado; los datos se recifrarán al guardar.');
+    return result;
 });
