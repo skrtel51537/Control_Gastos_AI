@@ -23,20 +23,28 @@ jobs:
   publicar:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      # Acciones fijadas por SHA (la etiqueta va en el comentario): una etiqueta
+      # se puede mover, un SHA no. Dependabot las mantiene al día.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version: 22
-          cache: npm
+          persist-credentials: false
+
+      # Sin caché de npm a propósito: este workflow genera el instalador que se
+      # distribuye, y una caché manipulada podría colarse en él.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          check-latest: true
+          package-manager-cache: false
 
       - name: Instalar dependencias
         run: npm ci
 
-      - name: Comprobaciones (tipos y tests)
+      - name: Comprobaciones (tipos, tests y soporte de Electron)
         run: |
           npm run typecheck
           npm test
+          node scripts/check-electron-support.mjs
 
       # Crear la release en borrador ANTES de compilar. Si no existe,
       # electron-builder sube el instalador y el .blockmap a la vez y cada
