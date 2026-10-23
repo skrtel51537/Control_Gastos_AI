@@ -13,7 +13,9 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    host: '0.0.0.0',
+    // Solo accesible desde este ordenador (no desde otros equipos de la red).
+    host: 'localhost',
+    strictPort: true,
   },
   plugins: [react()],
   resolve: {
