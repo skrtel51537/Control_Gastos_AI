@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, safeStorage } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+import { fetchBotMovements } from './botClient.js';
 
 const require = createRequire(import.meta.url);
 const { autoUpdater } = require('electron-updater');
@@ -31,6 +32,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const isDev = process.env.NODE_ENV === 'development';
+
+// En desarrollo, carpeta de datos propia: así las pruebas nunca abren ni
+// modifican los archivos de la app instalada. Debe hacerse antes de 'ready'.
+if (isDev) {
+    app.setPath('userData', path.join(app.getPath('appData'), 'dashboard-gastos-mensuales-dev'));
+}
 
 let mainWindow;
 
@@ -225,5 +232,15 @@ ipcMain.handle('secure-decrypt', async (event, b64) => {
     if (typeof b64 !== 'string' || !(await safeStorage.isAsyncEncryptionAvailable())) return null;
     const { result, shouldReEncrypt } = await safeStorage.decryptStringAsync(Buffer.from(b64, 'base64'));
     if (shouldReEncrypt) log.info('safeStorage: la clave ha cambiado; los datos se recifrarán al guardar.');
+    return result;
+});
+
+// Lectura de movimientos desde la API del bot de gastos. La petición se hace
+// aquí y no en la ventana para no relajar la CSP (connect-src 'self'). En el
+// log solo queda el tipo de error: nunca el token.
+ipcMain.handle('bot-fetch-movements', async (event, url, token) => {
+    if (!isTrustedSender(event)) return null;
+    const result = await fetchBotMovements(url, token);
+    if (!result.ok) log.warn(`Bot: no se han podido cargar los movimientos (${result.error}).`);
     return result;
 });

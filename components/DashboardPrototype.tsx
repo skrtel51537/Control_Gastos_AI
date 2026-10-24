@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useMemo, Suspense, lazy } from 'react';
-import { DashboardData, Tab } from '../types';
+import { DashboardData, DataSource, Tab } from '../types';
 import { processExcelFile } from '../utils/excelParser';
-import { loadJSON, saveJSON, removeKey, hasKey } from '../utils/storage';
+import { loadJSON, saveJSON, saveEncryptedJSON, removeKey, hasKey } from '../utils/storage';
 import { buildBackup, parseBackup, backupFilename } from '../utils/backup';
 import { FinanceSettings, DEFAULT_SETTINGS } from '../utils/finance';
+import { BotConfig, BotLoadError, isBotAvailable, loadFromBot, sanitizeBotConfig } from '../utils/botApi';
 import { Sidebar } from './ui/Sidebar';
 import { Header } from './ui/Header';
 import { UploadView } from './ui/UploadView';
 import { AboutPanel } from './ui/AboutPanel';
+import { BotSettingsPanel } from './ui/BotSettingsPanel';
+import { BotStatusBar } from './ui/BotStatusBar';
 
 // Las pestañas (y con ellas la librería de gráficas) se cargan bajo demanda:
 // acelera el arranque y la pantalla inicial de carga de Excel.
@@ -20,6 +23,12 @@ const GoalsTab = lazy(() => import('./tabs/GoalsTab').then((m) => ({ default: m.
 
 const DATA_KEY = 'finance_data_v3';
 const SETTINGS_KEY = 'finance_settings_v1';
+const BOT_CONFIG_KEY = 'bot_config_v1'; // dirección y token del bot (siempre cifrado)
+const SOURCE_KEY = 'data_source_v1';
+
+const REPLACE_WITH_BOT_MSG =
+  'Los datos del bot sustituirán a los que tienes cargados ahora (Excel o copia de seguridad). ' +
+  'Tus objetivos y presupuestos no cambian.\n\n¿Continuar?';
 
 
 const hydrateData = (parsed: any): DashboardData => {
@@ -42,25 +51,46 @@ export const DashboardPrototype: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('RESUMEN');
   const [showAbout, setShowAbout] = useState(false);
 
+  // Bot de gastos (solo en la app de escritorio)
+  const botAvailable = isBotAvailable();
+  const [botConfig, setBotConfig] = useState<BotConfig | null>(null);
+  const [source, setSource] = useState<DataSource | null>(null);
+  const [botLoading, setBotLoading] = useState(false);
+  const [botError, setBotError] = useState<string | null>(null);
+  const [showBotSettings, setShowBotSettings] = useState(false);
+
   // Year Filter State
   const [selectedYear, setSelectedYear] = useState<string>('TOTAL');
 
   useEffect(() => {
-    loadJSON<any>(DATA_KEY)
-      .then((parsed) => {
-        if (parsed) {
-          setRawData(hydrateData(parsed));
-        } else if (hasKey(DATA_KEY)) {
-          // Hay algo guardado pero no se pudo leer (p. ej. descifrado fallido
-          // tras reinstalar el sistema): avisar en vez de aparecer "vacío".
-          setError(
-            'Hay datos guardados de una sesión anterior, pero no se han podido leer. ' +
-            'Esto puede ocurrir tras reinstalar el sistema o cambiar de cuenta de usuario. ' +
-            'Vuelve a cargar tu Excel o restaura una copia de seguridad.'
-          );
-        }
-      })
-      .catch((e) => console.error(e));
+    (async () => {
+      // Primero lo guardado (la app abre con datos aunque el bot esté apagado);
+      // después, si los datos vienen del bot, se actualizan en segundo plano.
+      const [parsed, savedSource, savedConfig] = await Promise.all([
+        loadJSON<any>(DATA_KEY),
+        loadJSON<DataSource>(SOURCE_KEY),
+        botAvailable ? loadJSON<unknown>(BOT_CONFIG_KEY) : Promise.resolve(null),
+      ]);
+      if (parsed) {
+        setRawData(hydrateData(parsed));
+      } else if (hasKey(DATA_KEY)) {
+        // Hay algo guardado pero no se pudo leer (p. ej. descifrado fallido
+        // tras reinstalar el sistema): avisar en vez de aparecer "vacío".
+        setError(
+          'Hay datos guardados de una sesión anterior, pero no se han podido leer. ' +
+          'Esto puede ocurrir tras reinstalar el sistema o cambiar de cuenta de usuario. ' +
+          'Vuelve a cargar tu Excel o restaura una copia de seguridad.'
+        );
+      }
+      if (savedSource) setSource(savedSource);
+
+      const config = sanitizeBotConfig(savedConfig);
+      setBotConfig(config);
+      // Si los datos actuales vienen de un Excel o de una copia, no se pisan solos.
+      if (config && (!savedSource || savedSource.type === 'bot')) {
+        setBotError(await loadBot(config));
+      }
+    })().catch((e) => console.error(e));
 
     loadJSON<FinanceSettings>(SETTINGS_KEY)
       .then((saved) => {
@@ -119,6 +149,75 @@ export const DashboardPrototype: React.FC = () => {
     };
   }, [rawData, selectedYear]);
 
+  const updateSource = (next: DataSource | null) => {
+    setSource(next);
+    if (next) saveJSON(SOURCE_KEY, next).catch(() => {});
+    else removeKey(SOURCE_KEY);
+  };
+
+  // --- Bot de gastos ---
+
+  // Carga los movimientos del bot. Devuelve el mensaje de error, o null si ha ido bien.
+  const loadBot = async (config: BotConfig): Promise<string | null> => {
+    setBotLoading(true);
+    try {
+      const load = await loadFromBot(config);
+      setRawData(load.data);
+      setError(null);
+      setBotError(null);
+      updateSource({ type: 'bot', generatedAt: load.generatedAt, loadedAt: new Date().toISOString() });
+      if (load.skipped > 0) {
+        setStorageWarning(`Se han descartado ${load.skipped} movimientos del bot porque no tenían el formato esperado.`);
+      }
+      try {
+        await saveJSON(DATA_KEY, load.data);
+      } catch {
+        setStorageWarning(
+          'Los datos del bot se han cargado, pero no se han podido guardar en este equipo: si el bot está apagado la próxima vez, no habrá datos.'
+        );
+      }
+      return null;
+    } catch (err) {
+      // Solo los errores propios llevan un mensaje pensado para el usuario.
+      return err instanceof BotLoadError ? err.message : 'No se han podido cargar los datos del bot.';
+    } finally {
+      setBotLoading(false);
+    }
+  };
+
+  // Desde el panel de conexión: solo se guarda la configuración si la carga funciona.
+  const connectBot = async (config: BotConfig): Promise<string | null> => {
+    const wasBot = source?.type === 'bot';
+    const failure = await loadBot(config);
+    if (failure) return failure;
+    setBotConfig(config);
+    if (!wasBot) setSelectedYear('TOTAL');
+    try {
+      await saveEncryptedJSON(BOT_CONFIG_KEY, config);
+    } catch {
+      setStorageWarning(
+        'Datos cargados, pero el token no se ha podido guardar cifrado en este equipo: tendrás que volver a escribirlo la próxima vez.'
+      );
+    }
+    return null;
+  };
+
+  // Botón "Cargar / Recargar desde el bot".
+  const handleBotButton = async () => {
+    if (!botConfig) return setShowBotSettings(true);
+    const wasBot = source?.type === 'bot';
+    if (rawData && !wasBot && !window.confirm(REPLACE_WITH_BOT_MSG)) return;
+    const failure = await loadBot(botConfig);
+    setBotError(failure);
+    if (!failure && !wasBot) setSelectedYear('TOTAL');
+  };
+
+  const forgetBot = () => {
+    removeKey(BOT_CONFIG_KEY);
+    setBotConfig(null);
+    setBotError(null);
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -126,6 +225,9 @@ export const DashboardPrototype: React.FC = () => {
     try {
       const processed = await processExcelFile(file);
       setRawData(processed);
+      setBotError(null);
+      // Con un Excel cargado, la app deja de cargar del bot al abrirse.
+      updateSource({ type: 'excel', loadedAt: new Date().toISOString() });
       setSelectedYear('TOTAL'); // Reset filter on new upload
       try {
         await saveJSON(DATA_KEY, processed);
@@ -141,7 +243,7 @@ export const DashboardPrototype: React.FC = () => {
     }
   };
 
-  const clearData = () => { removeKey(DATA_KEY); setRawData(null); };
+  const clearData = () => { removeKey(DATA_KEY); updateSource(null); setBotError(null); setRawData(null); };
 
   // --- Copia de seguridad (exportar / restaurar) ---
 
@@ -177,6 +279,9 @@ export const DashboardPrototype: React.FC = () => {
       if (restored.settings) setSettings({ ...DEFAULT_SETTINGS, ...restored.settings });
       if (restored.data) {
         setRawData(restored.data);
+        setBotError(null);
+        // Como con un Excel: los datos restaurados no se pisan con los del bot al abrir.
+        updateSource({ type: 'backup', loadedAt: new Date().toISOString() });
         setSelectedYear('TOTAL');
       }
       setError(null);
@@ -194,12 +299,49 @@ export const DashboardPrototype: React.FC = () => {
     }
   };
 
-  if (!filteredData) return <UploadView isLoading={isLoading} error={error} onUpload={handleFileUpload} onRestore={restoreBackup} />;
+  const botPanel = showBotSettings && (
+    <BotSettingsPanel
+      config={botConfig}
+      willReplaceData={!!rawData && source?.type !== 'bot'}
+      onConnect={connectBot}
+      onForget={forgetBot}
+      onClose={() => setShowBotSettings(false)}
+    />
+  );
+
+  if (!filteredData) {
+    return (
+      <>
+        <UploadView
+          isLoading={isLoading || botLoading}
+          error={error ?? botError}
+          onUpload={handleFileUpload}
+          onRestore={restoreBackup}
+          onBot={botAvailable ? handleBotButton : undefined}
+        />
+        {botPanel}
+      </>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-slate-950 overflow-hidden text-slate-200 font-sans">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onClear={clearData} onExport={exportBackup} onRestore={restoreBackup} onAbout={() => setShowAbout(true)} />
+      <Sidebar
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        onClear={clearData}
+        onExport={exportBackup}
+        onRestore={restoreBackup}
+        onAbout={() => setShowAbout(true)}
+        bot={botAvailable ? {
+          onLoad: handleBotButton,
+          onSettings: () => setShowBotSettings(true),
+          loading: botLoading,
+          isSource: source?.type === 'bot',
+        } : undefined}
+      />
       {showAbout && <AboutPanel onClose={() => setShowAbout(false)} />}
+      {botPanel}
 
       <main className="flex-1 flex flex-col overflow-hidden relative">
         <Header 
@@ -210,6 +352,15 @@ export const DashboardPrototype: React.FC = () => {
         />
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 scroll-smooth">
           <div className="max-w-7xl mx-auto space-y-6">
+            {botAvailable && (
+              <BotStatusBar
+                source={source}
+                loading={botLoading}
+                error={botError}
+                onReload={handleBotButton}
+                onDismissError={() => setBotError(null)}
+              />
+            )}
             {storageWarning && (
               <div className="flex items-start justify-between gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-sm">
                 <span>⚠️ {storageWarning}</span>

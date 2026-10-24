@@ -34,5 +34,12 @@ export interface DashboardData {
   categoryHierarchy: Record<string, string[]>; // Map Cat 1 -> List of Cat 2
 }
 
+// De dónde salen los datos cargados. Solo con 'bot' se recargan al abrir la app.
+export interface DataSource {
+  type: 'excel' | 'backup' | 'bot';
+  generatedAt?: string; // ISO 8601: cuándo generó el bot los datos
+  loadedAt: string; // ISO 8601: cuándo se cargaron en la app
+}
+
 // Tipo de pestaña activa del dashboard (navegación del menú lateral).
 export type Tab = 'RESUMEN' | 'MENSUAL' | 'CATEGORIAS' | 'TENDENCIAS' | 'COMPARAR' | 'OBJETIVOS';

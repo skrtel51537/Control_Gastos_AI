@@ -1,12 +1,14 @@
 # Dashboard Gastos
 
 Aplicación de escritorio (Electron + React) para visualizar y analizar gastos
-mensuales a partir de un fichero Excel. De uso personal y completamente local:
-los datos financieros **se quedan en tu equipo** y no se envían a ningún servidor.
+mensuales a partir de un fichero Excel o del bot de gastos de Telegram. De uso
+personal: los datos financieros **se quedan en tu equipo** y no se envían a ningún
+servidor (la app solo *lee* del bot propio, nunca le envía datos).
 
 ## Funcionalidades
 
-- Carga de un Excel de gastos (con plantilla de ejemplo descargable desde la app).
+- Carga desde el **bot de gastos** (Telegram) o desde un Excel (con plantilla de
+  ejemplo descargable desde la app). Ver [Cargar desde el bot](#cargar-desde-el-bot).
 - Resumen global: ingresos, gastos, ahorro y tasa de ahorro.
 - Análisis mensual con desglose interactivo por categoría y subcategoría.
 - Desglose por categorías y evolución de tendencias.
@@ -37,7 +39,40 @@ npm install        # Instalar dependencias
 npm run electron:dev   # App de escritorio en modo desarrollo (recarga en caliente)
 ```
 
-`npm run dev` levanta solo la web en el navegador (sin las funciones de Electron).
+`npm run dev` levanta solo la web en el navegador (sin las funciones de Electron,
+como el cifrado o la carga desde el bot).
+
+En modo desarrollo la app guarda sus datos en una carpeta propia
+(`%APPDATA%\dashboard-gastos-mensuales-dev`), así las pruebas nunca tocan los datos
+de la app instalada.
+
+## Cargar desde el bot
+
+El bot de gastos (proyecto aparte, `Bot_gastos`) guarda los movimientos en
+SQLite y ofrece una API HTTP de solo lectura (`GET /api/movimientos`). Para usarla:
+
+1. Arranca el bot (su API arranca con él).
+2. En la app, pulsa **🤖 Cargar desde el bot** (o **⚙️ Conexión con el bot** en la
+   barra lateral), deja la dirección `http://127.0.0.1:8765` si el bot está en el
+   mismo ordenador y pega tu token (línea `API_TOKENS=nombre:token` del `.env` del
+   bot, solo la parte de después de los dos puntos).
+3. **Conectar y cargar** prueba la conexión; la configuración solo se guarda si
+   funciona, y el token **siempre cifrado** (si el cifrado no está disponible, no se
+   guarda).
+
+Al abrir la app se muestran al momento los últimos datos guardados y después se
+actualizan desde el bot. Si el bot está apagado, se avisa y se siguen viendo los
+datos de la última carga (con su fecha). Si cargas un Excel o restauras una copia,
+la app deja de cargar del bot al abrirse hasta que vuelvas a pulsar «Cargar desde
+el bot». El token no se incluye en la copia de seguridad.
+
+La petición la hace el proceso principal de Electron (`electron/botClient.js`), no
+la ventana: así la CSP sigue sin permitir conexiones externas. Solo acepta
+direcciones `http(s)`, no sigue redirecciones, corta a los 10 s, limita el tamaño
+de la respuesta y nunca escribe el token en los logs. La respuesta se valida y se
+convierte con la misma lógica que el Excel (`utils/botApi.ts`): mismas claves de
+mes y misma normalización de categorías, para que objetivos y presupuestos sigan
+coincidiendo.
 
 ## Compilar el instalador (Windows)
 
@@ -77,7 +112,7 @@ Comprobación de tipos y tests automáticos:
 
 ```bash
 npm run typecheck   # Verifica los tipos de TypeScript
-npm test            # Ejecuta los tests (cálculos financieros y lector de Excel)
+npm test            # Ejecuta los tests (cálculos financieros, lector de Excel y bot)
 ```
 
 La compilación (`npm run build`) ya ejecuta la comprobación de tipos antes de generar
@@ -119,6 +154,8 @@ email desde la pestaña *Security* del repositorio.
 - Los mensajes entre la interfaz y el proceso principal solo se aceptan desde la
   propia ventana de la app.
 - Datos cifrados en local con el almacén seguro del sistema (`safeStorage`).
+- Token del bot guardado solo cifrado y enviado solo en la cabecera `Authorization`
+  desde el proceso principal (ver [Cargar desde el bot](#cargar-desde-el-bot)).
 - **Electron Fuses** en el instalador: el `.exe` no puede usarse como intérprete de
   Node (`ELECTRON_RUN_AS_NODE`, `NODE_OPTIONS` y `--inspect` desactivados) y se
   exige la integridad del código empaquetado (`app.asar`). Para comprobarlas:

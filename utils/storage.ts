@@ -40,6 +40,15 @@ export async function saveJSON(key: string, value: unknown): Promise<void> {
   localStorage.setItem(key, plain);
 }
 
+// Para secretos (p. ej. el token del bot): como saveJSON, pero nunca guarda en
+// texto plano. Si no se puede cifrar, lanza un error y no escribe nada.
+export async function saveEncryptedJSON(key: string, value: unknown): Promise<void> {
+  const encrypted = (await canEncrypt()) ? await window.electronAPI!.encrypt!(JSON.stringify(value)) : null;
+  if (!encrypted) throw new Error('El cifrado no está disponible en este equipo.');
+  const envelope: EncryptedEnvelope = { __enc: 1, d: encrypted };
+  localStorage.setItem(key, JSON.stringify(envelope));
+}
+
 export async function loadJSON<T>(key: string): Promise<T | null> {
   const raw = localStorage.getItem(key);
   if (!raw) return null;

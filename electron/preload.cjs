@@ -23,4 +23,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     isEncryptionAvailable: () => ipcRenderer.invoke('secure-available'),
     encrypt: (plain) => ipcRenderer.invoke('secure-encrypt', plain),
     decrypt: (b64) => ipcRenderer.invoke('secure-decrypt', b64),
+    // Movimientos del bot de gastos (la petición la hace el proceso principal)
+    botFetchMovements: (url, token) => ipcRenderer.invoke('bot-fetch-movements', url, token),
 });

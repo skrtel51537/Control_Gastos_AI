@@ -1,11 +1,12 @@
 import React from 'react';
 import { downloadSampleExcel } from '../../utils/excelParser';
 
-export const UploadView = ({ isLoading, error, onUpload, onRestore }: {
+export const UploadView = ({ isLoading, error, onUpload, onRestore, onBot }: {
   isLoading: boolean,
   error: string | null,
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void,
   onRestore: (e: React.ChangeEvent<HTMLInputElement>) => void,
+  onBot?: () => void, // solo en la app de escritorio
 }) => (
   <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
     <div className="absolute inset-0 bg-[linear-gradient(to_right,#4f46e51a_1px,transparent_1px),linear-gradient(to_bottom,#4f46e51a_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
@@ -16,7 +17,9 @@ export const UploadView = ({ isLoading, error, onUpload, onRestore }: {
           📂
         </div>
         <h2 className="text-2xl font-bold text-white mb-2">Cargar Datos</h2>
-        <p className="text-slate-400 text-sm">Sube tu Excel de gastos para visualizar el dashboard.</p>
+        <p className="text-slate-400 text-sm">
+          {onBot ? 'Carga tus gastos desde el bot o sube tu Excel.' : 'Sube tu Excel de gastos para visualizar el dashboard.'}
+        </p>
       </div>
 
       {error && (
@@ -26,6 +29,19 @@ export const UploadView = ({ isLoading, error, onUpload, onRestore }: {
       )}
 
       <div className="space-y-4">
+        {onBot && (
+          <>
+            <button
+              type="button"
+              onClick={onBot}
+              disabled={isLoading}
+              className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium rounded-xl p-4 transition-colors"
+            >
+              <span className="text-xl" aria-hidden="true">🤖</span> Cargar desde el bot
+            </button>
+            <p className="text-center text-xs text-slate-500">o, si prefieres, un Excel:</p>
+          </>
+        )}
         <label className={`block w-full cursor-pointer group ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
           <div className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center hover:border-indigo-500 hover:bg-slate-800/50 transition-all">
              <span className="block text-4xl mb-2">📄</span>
