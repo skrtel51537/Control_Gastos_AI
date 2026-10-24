@@ -125,7 +125,7 @@ describe('loadFromBot', () => {
 
   it.each([
     ['unauthorized', /^Token incorrecto/],
-    ['offline', /^El bot no está en marcha/],
+    ['offline', /^No se puede conectar con el bot/],
     ['server', /^El bot no pudo leer los datos/],
     ['timeout', /no ha respondido a tiempo/],
     ['algo-raro', /no parece venir del bot/],

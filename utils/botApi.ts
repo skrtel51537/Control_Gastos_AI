@@ -27,8 +27,9 @@ export type BotLoadErrorKind = BotErrorKind | 'unavailable' | 'empty';
 
 // Mensajes para el usuario. Nunca incluyen el token ni detalles técnicos.
 const MESSAGES: Record<BotLoadErrorKind, string> = {
-  offline: 'El bot no está en marcha. Arráncalo y vuelve a intentarlo.',
-  timeout: 'El bot no ha respondido a tiempo. Comprueba que está en marcha y vuelve a intentarlo.',
+  // El bot puede estar en otro ordenador (p. ej. el de la pareja, por Tailscale).
+  offline: 'No se puede conectar con el bot. Comprueba que el ordenador donde funciona está encendido.',
+  timeout: 'El bot no ha respondido a tiempo. Comprueba que el ordenador donde funciona está encendido.',
   unauthorized: 'Token incorrecto. Comprueba en «Conexión con el bot» que lo has copiado entero.',
   server: 'El bot no pudo leer los datos. Revisa la ventana del bot.',
   invalid: 'La respuesta no parece venir del bot. Revisa la dirección en «Conexión con el bot».',
