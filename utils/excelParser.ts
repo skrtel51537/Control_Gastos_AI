@@ -26,13 +26,20 @@ const SPANISH_MONTHS: Record<string, number> = {
 };
 
 // Función para unificar "Discos/Libros" con "Discos/libros" -> "Discos/libros"
-const normalizeText = (text: string): string => {
+// Se usa también con los datos del bot: los presupuestos y objetivos guardados
+// usan estos nombres normalizados.
+export const normalizeText = (text: string): string => {
   if (!text) return 'Otros';
   const trimmed = text.trim();
   if (trimmed.length === 0) return 'Otros';
   // Capitalize first letter, lowercase the rest
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
 };
+
+// Clave de agrupación por mes (p. ej. "OCT 26"). Es la única fuente de esta
+// expresión: el Excel y el bot deben producir exactamente la misma clave.
+export const monthKeyFor = (date: Date): string =>
+  `${date.toLocaleString('es-ES', { month: 'short' }).toUpperCase()} ${date.getFullYear().toString().slice(-2)}`;
 
 // Lógica pura de parseo (sin FileReader) para poder probarla con tests.
 export const parseExcelData = async (data: ArrayBuffer | Uint8Array): Promise<DashboardData> => {
@@ -115,7 +122,7 @@ const parseSheet = (sheet: XLSXType.WorkSheet, sheetName: string): Transaction[]
     const day = String(globalDate.getDate()).padStart(2, '0');
     const isoDate = `${year}-${month}-${day}`;
     
-    const monthKey = `${globalDate.toLocaleString('es-ES', { month: 'short' }).toUpperCase()} ${globalDate.getFullYear().toString().slice(-2)}`;
+    const monthKey = monthKeyFor(globalDate);
 
     // --- 2. Ingresos (B4) ---
     const cellB4 = sheet['B4'];
@@ -228,7 +235,8 @@ const parseSpanishDateString = (str: string): Date | null => {
   return null;
 };
 
-const buildDashboardData = (transactions: Transaction[]): DashboardData => {
+// Agrupa los movimientos por mes y calcula totales. La comparten el Excel y el bot.
+export const buildDashboardData = (transactions: Transaction[]): DashboardData => {
     const groupedMap = new Map<string, Transaction[]>();
     const categoriesSet = new Set<string>();
     const categoryHierarchy: Record<string, Set<string>> = {};
@@ -304,7 +312,7 @@ export const getDemoData = (): DashboardData => {
         const day = String(d.getDate()).padStart(2, '0');
         const dateStr = `${year}-${month}-${day}`;
         
-        const monthKey = `${d.toLocaleString('es-ES', { month: 'short' }).toUpperCase()} ${d.getFullYear().toString().slice(-2)}`;
+        const monthKey = monthKeyFor(d);
 
         transactions.push({
             id: `demo-${i}-inc`, date: dateStr, concept: 'Ingresos', category: 'Ingresos', subcategory: 'General', amount: 3000, type: 'income', monthKey

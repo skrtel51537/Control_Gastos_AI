@@ -1,13 +1,15 @@
 import React from 'react';
 import type { Tab } from '../../types';
 
-export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore, onAbout }: {
+export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore, onAbout, bot }: {
   activeTab: Tab,
   onTabChange: (t: Tab) => void,
   onClear: () => void,
   onExport: () => void,
   onRestore: (e: React.ChangeEvent<HTMLInputElement>) => void,
   onAbout: () => void,
+  // Solo en la app de escritorio: cargar desde el bot y su configuración.
+  bot?: { onLoad: () => void, onSettings: () => void, loading: boolean, isSource: boolean },
 }) => (
   <aside className="w-20 lg:w-64 border-r border-slate-800 bg-slate-900/50 flex flex-col hidden sm:flex">
     <div className="h-16 flex items-center justify-center lg:justify-start lg:px-6 border-b border-slate-800">
@@ -34,6 +36,28 @@ export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore, 
       ))}
     </nav>
     <div className="p-4 border-t border-slate-800 space-y-1">
+      {bot && (
+        <>
+          <button
+            onClick={bot.onLoad}
+            disabled={bot.loading}
+            title="Carga los gastos que apuntas en Telegram"
+            aria-label={bot.isSource ? 'Recargar desde el bot' : 'Cargar desde el bot'}
+            className="w-full flex items-center justify-center lg:justify-start p-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-200 disabled:opacity-50 transition-colors text-sm"
+          >
+            <span className="mr-2" aria-hidden="true">🤖</span>
+            <span className="hidden lg:inline">{bot.loading ? 'Cargando…' : bot.isSource ? 'Recargar del bot' : 'Cargar desde el bot'}</span>
+          </button>
+          <button
+            onClick={bot.onSettings}
+            title="Dirección y token del bot"
+            aria-label="Conexión con el bot"
+            className="w-full flex items-center justify-center lg:justify-start p-3 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors text-sm"
+          >
+            <span className="mr-2" aria-hidden="true">⚙️</span><span className="hidden lg:inline">Conexión con el bot</span>
+          </button>
+        </>
+      )}
       <button
         onClick={onExport}
         title="Guarda tus datos y configuración en un archivo (copia de seguridad)"

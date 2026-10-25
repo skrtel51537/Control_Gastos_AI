@@ -85,3 +85,18 @@ describe('storage con cifrado (Electron)', () => {
     expect(s.hasKey('k')).toBe(true); // el dato sigue ahí, solo que ilegible
   });
 });
+
+describe('saveEncryptedJSON (secretos)', () => {
+  it('guarda cifrado y se lee con loadJSON', async () => {
+    const s = await importStorage(fakeCrypto);
+    await s.saveEncryptedJSON('k', { token: 'secreto' });
+    expect(store.get('k')).not.toContain('secreto');
+    expect(await s.loadJSON('k')).toEqual({ token: 'secreto' });
+  });
+
+  it('sin cifrado disponible lanza un error y no guarda nada en texto plano', async () => {
+    const s = await importStorage(undefined);
+    await expect(s.saveEncryptedJSON('k', { token: 'secreto' })).rejects.toThrow();
+    expect(store.has('k')).toBe(false);
+  });
+});
