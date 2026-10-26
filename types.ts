@@ -9,6 +9,9 @@ export interface Transaction {
   amount: number;
   type: 'income' | 'expense';
   monthKey: string; // Helper for grouping e.g. "NOV 25"
+  // Solo con datos del bot (si su API los envía):
+  registeredAt?: string; // ISO 8601: cuándo se apuntó en el bot
+  sharedTotal?: number; // gasto compartido: importe total (positivo); `amount` es la parte propia
 }
 
 export interface MonthlySummary {

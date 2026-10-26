@@ -10,7 +10,10 @@ servidor (la app solo *lee* del bot propio, nunca le envía datos).
 - Carga desde el **bot de gastos** (Telegram) o desde un Excel (con plantilla de
   ejemplo descargable desde la app). Ver [Cargar desde el bot](#cargar-desde-el-bot).
 - Resumen global: ingresos, gastos, ahorro y tasa de ahorro.
-- Análisis mensual con desglose interactivo por categoría y subcategoría.
+- Análisis mensual con desglose interactivo por categoría y subcategoría, ahorro
+  del mes en euros y en %, y **lista de movimientos** del mes (ordenable por último
+  apuntado, fecha o importe, con buscador y filtros) para comprobar que está todo
+  apuntado.
 - Desglose por categorías y evolución de tendencias.
 - Alertas de meses con gasto elevado (umbral configurable).
 - Objetivos de ahorro mensual (en € o en % de ingresos) con seguimiento por mes.
@@ -73,6 +76,12 @@ de la respuesta y nunca escribe el token en los logs. La respuesta se valida y s
 convierte con la misma lógica que el Excel (`utils/botApi.ts`): mismas claves de
 mes y misma normalización de categorías, para que objetivos y presupuestos sigan
 coincidiendo.
+
+Campos opcionales que la app aprovecha si la API los envía en cada movimiento:
+`registered_at` (ISO 8601, cuándo se apuntó: ordena «Últimos apuntados» y marca
+como «Nuevo» lo de las últimas 24 h) y `shared_total` (gasto compartido: importe
+total, con `amount` como la parte propia). Sin ellos, «Últimos apuntados» usa el
+número del movimiento (`g-<n>`).
 
 ## Compilar el instalador (Windows)
 

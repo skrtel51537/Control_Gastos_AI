@@ -83,7 +83,7 @@ const toTransaction = (raw: unknown): Transaction | null => {
   const subcategory = normalizeText(text(raw.subcategory));
   if (FORBIDDEN_KEYS.has(category) || FORBIDDEN_KEYS.has(subcategory)) return null;
 
-  return {
+  const t: Transaction = {
     id,
     date: raw.date as string,
     concept: text(raw.concept) || subcategory,
@@ -94,6 +94,16 @@ const toTransaction = (raw: unknown): Transaction | null => {
     type: raw.type,
     monthKey: monthKeyFor(date),
   };
+
+  // Campos opcionales: si faltan o no son válidos, se ignoran (no invalidan el movimiento).
+  if (typeof raw.registered_at === 'string' && !Number.isNaN(Date.parse(raw.registered_at))) {
+    t.registeredAt = raw.registered_at;
+  }
+  const shared = raw.shared_total;
+  if (raw.type === 'expense' && typeof shared === 'number' && Number.isFinite(shared) && shared !== 0) {
+    t.sharedTotal = Math.abs(shared);
+  }
+  return t;
 };
 
 // Convierte la respuesta de GET /api/movimientos en los datos del dashboard.

@@ -11,6 +11,7 @@ import {
 } from '../../utils/finance';
 import { COLORS, COLORS_DRILLDOWN, CHART_TOOLTIP, GRID_STROKE, AXIS_STROKE, AXIS_STROKE_LIGHT, stateStyles } from '../../utils/theme';
 import { KPIBox } from '../ui/KPIBox';
+import { MonthlyMovements } from './MonthlyMovements';
 
 export const MonthlyTab = ({ data, settings }: { data: DashboardData, settings: FinanceSettings }) => {
   const [selectedMonthIdx, setSelectedMonthIdx] = useState(data.monthlyData.length > 0 ? data.monthlyData.length - 1 : 0);
@@ -219,11 +220,18 @@ export const MonthlyTab = ({ data, settings }: { data: DashboardData, settings: 
       </div>
 
       {/* KPIs con tendencia frente al mes anterior */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPIBox label="Ingresos" value={monthData.income} isCurrency positive trendPct={comparison ? comparison.incomeDeltaPct : null} />
         <KPIBox label="Gastos" value={monthData.expense} isCurrency negative trendPct={comparison ? comparison.expenseDeltaPct : null} />
+        <KPIBox label="Ahorro del mes" value={monthData.balance} isCurrency positive={monthData.balance >= 0} negative={monthData.balance < 0} />
         <KPIBox label="Tasa de ahorro" value={monthData.savingsRate} suffix="%" />
       </div>
+
+      <MonthlyMovements
+        transactions={monthData.transactions}
+        categoryColors={cat1ColorMap}
+        focusCategory={drilldownCategory}
+      />
 
       {/* F4: Comparativa con el mes anterior */}
       {comparison && (
@@ -270,8 +278,10 @@ export const MonthlyTab = ({ data, settings }: { data: DashboardData, settings: 
                   <div className="flex items-center gap-3 min-w-0">
                     <span className="w-6 h-6 flex items-center justify-center rounded-full bg-slate-700 text-xs font-bold text-slate-300 shrink-0">{i + 1}</span>
                     <div className="min-w-0">
-                      <p className="text-slate-200 text-sm font-medium truncate">{t.subcategory || t.category}</p>
-                      <p className="text-slate-500 text-xs truncate">{t.category}</p>
+                      <p className="text-slate-200 text-sm font-medium truncate">{t.concept || t.subcategory || t.category}</p>
+                      <p className="text-slate-500 text-xs truncate">
+                        {t.concept && t.concept !== t.subcategory ? `${t.category} › ${t.subcategory}` : t.category}
+                      </p>
                     </div>
                   </div>
                   <span className="text-white font-mono font-bold text-sm shrink-0">{formatEuro(Math.abs(t.amount))}</span>
