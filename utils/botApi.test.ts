@@ -160,3 +160,24 @@ describe('utilidades de configuración', () => {
     expect(maskToken('corto')).toBe('••••••••');
   });
 });
+
+describe('mapBotResponse: campos opcionales', () => {
+  it('guarda cuándo se apuntó y el total de un gasto compartido', () => {
+    const { data } = mapBotResponse(response([
+      { ...expense('g-1', '2026-10-05', -30, 'Ocio', 'Cine'), registered_at: '2026-10-05T21:30:00+02:00', shared_total: -60 },
+    ]));
+    expect(data.allTransactions[0]).toMatchObject({ registeredAt: '2026-10-05T21:30:00+02:00', sharedTotal: 60, amount: -30 });
+  });
+
+  it('ignora valores no válidos sin descartar el movimiento', () => {
+    const result = mapBotResponse(response([
+      { ...expense('g-1', '2026-10-05', -30, 'Ocio', 'Cine'), registered_at: 'ayer', shared_total: 'mucho' },
+      { ...income('i-1', '2026-10-01', 1000), shared_total: 2000 }, // un ingreso no es compartido
+    ]));
+    expect(result.skipped).toBe(0);
+    for (const t of result.data.allTransactions) {
+      expect(t.registeredAt).toBeUndefined();
+      expect(t.sharedTotal).toBeUndefined();
+    }
+  });
+});
