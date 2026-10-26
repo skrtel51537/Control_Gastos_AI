@@ -135,7 +135,7 @@ export const ComparatorTab = ({ data }: { data: DashboardData }) => {
                 <h3 className={`text-lg font-bold mb-4 ${accent}`}>{agg.label}</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <KPIBox label="Ingresos" value={agg.income} isCurrency positive trendPct={ref ? pctChange(agg.income, ref.income) : null} />
-                  <KPIBox label="Gastos" value={agg.expense} isCurrency negative trendPct={ref ? pctChange(agg.expense, ref.expense) : null} />
+                  <KPIBox label="Gastos" value={agg.expense} isCurrency negative lowerIsBetter trendPct={ref ? pctChange(agg.expense, ref.expense) : null} />
                   <KPIBox label="Ahorro" value={agg.balance} isCurrency positive={agg.balance >= 0} negative={agg.balance < 0} trendPct={ref ? pctChange(agg.balance, ref.balance) : null} />
                   <KPIBox label="Tasa de ahorro" value={agg.savingsRate} suffix="%" />
                 </div>

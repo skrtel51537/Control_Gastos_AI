@@ -222,7 +222,7 @@ export const MonthlyTab = ({ data, settings }: { data: DashboardData, settings: 
       {/* KPIs con tendencia frente al mes anterior */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPIBox label="Ingresos" value={monthData.income} isCurrency positive trendPct={comparison ? comparison.incomeDeltaPct : null} />
-        <KPIBox label="Gastos" value={monthData.expense} isCurrency negative trendPct={comparison ? comparison.expenseDeltaPct : null} />
+        <KPIBox label="Gastos" value={monthData.expense} isCurrency negative lowerIsBetter trendPct={comparison ? comparison.expenseDeltaPct : null} />
         <KPIBox label="Ahorro del mes" value={monthData.balance} isCurrency positive={monthData.balance >= 0} negative={monthData.balance < 0} />
         <KPIBox label="Tasa de ahorro" value={monthData.savingsRate} suffix="%" />
       </div>
