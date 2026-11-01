@@ -45,4 +45,4 @@ export interface DataSource {
 }
 
 // Tipo de pestaña activa del dashboard (navegación del menú lateral).
-export type Tab = 'RESUMEN' | 'MENSUAL' | 'CATEGORIAS' | 'TENDENCIAS' | 'COMPARAR' | 'OBJETIVOS';
+export type Tab = 'RESUMEN' | 'MENSUAL' | 'CATEGORIAS' | 'TENDENCIAS' | 'COMPARAR' | 'OBJETIVOS' | 'BALANCES';

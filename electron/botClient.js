@@ -1,4 +1,5 @@
-// Cliente de la API de solo lectura del bot de gastos (GET /api/movimientos).
+// Cliente de la API de solo lectura del bot de gastos (GET /api/movimientos y
+// GET /api/balance).
 //
 // Se ejecuta en el proceso principal. El token va solo en la cabecera
 // Authorization: nunca en la URL ni en los logs. No depende de Electron para
@@ -54,8 +55,9 @@ const readLimited = async (res, max) => {
 const isTimeout = (error) => error?.name === 'TimeoutError';
 
 // Resultado: { ok: true, body } o { ok: false, error } con error en
-// 'bad-url' | 'unauthorized' | 'offline' | 'timeout' | 'server' | 'invalid' | 'too-large'.
-export const fetchBotMovements = async (rawUrl, token, { fetchImpl = fetch, timeoutMs = BOT_TIMEOUT_MS } = {}) => {
+// 'bad-url' | 'unauthorized' | 'offline' | 'timeout' | 'server' | 'not-found' | 'invalid' | 'too-large'.
+// `path` es siempre una ruta fija de este archivo, nunca algo que venga de la ventana.
+const fetchBot = async (path, rawUrl, token, { fetchImpl = fetch, timeoutMs = BOT_TIMEOUT_MS } = {}) => {
     const base = parseBotBaseUrl(rawUrl);
     if (!base) return { ok: false, error: 'bad-url' };
     if (!isValidToken(token)) return { ok: false, error: 'unauthorized' };
@@ -63,7 +65,7 @@ export const fetchBotMovements = async (rawUrl, token, { fetchImpl = fetch, time
     const signal = AbortSignal.timeout(timeoutMs);
     let res;
     try {
-        res = await fetchImpl(new URL('api/movimientos', base).toString(), {
+        res = await fetchImpl(new URL(path, base).toString(), {
             method: 'GET',
             headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
             // No seguir redirecciones: el token no debe acabar en otro servidor.
@@ -77,6 +79,8 @@ export const fetchBotMovements = async (rawUrl, token, { fetchImpl = fetch, time
 
     if (res.status === 401 || res.status === 403) return { ok: false, error: 'unauthorized' };
     if (res.status >= 500) return { ok: false, error: 'server' };
+    // Un bot sin actualizar todavía no tiene la ruta pedida.
+    if (res.status === 404) return { ok: false, error: 'not-found' };
     if (res.status !== 200) return { ok: false, error: 'invalid' };
 
     let text;
@@ -93,3 +97,8 @@ export const fetchBotMovements = async (rawUrl, token, { fetchImpl = fetch, time
         return { ok: false, error: 'invalid' };
     }
 };
+
+export const fetchBotMovements = (rawUrl, token, options) => fetchBot('api/movimientos', rawUrl, token, options);
+
+// Balance mensual de los gastos compartidos (mismo token y mismas comprobaciones).
+export const fetchBotBalance = (rawUrl, token, options) => fetchBot('api/balance', rawUrl, token, options);

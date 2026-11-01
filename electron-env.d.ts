@@ -17,8 +17,8 @@ export interface AppInfo {
   update: UpdateStatus;
 }
 
-// Resultado de pedir los movimientos al bot (electron/botClient.js).
-export type BotErrorKind = 'bad-url' | 'unauthorized' | 'offline' | 'timeout' | 'server' | 'invalid' | 'too-large';
+// Resultado de pedir los movimientos o el balance al bot (electron/botClient.js).
+export type BotErrorKind = 'bad-url' | 'unauthorized' | 'offline' | 'timeout' | 'server' | 'not-found' | 'invalid' | 'too-large';
 export type BotFetchResult = { ok: true; body: unknown } | { ok: false; error: BotErrorKind };
 
 export interface ElectronAPI {
@@ -32,6 +32,7 @@ export interface ElectronAPI {
   encrypt?: (plain: string) => Promise<string | null>;
   decrypt?: (b64: string) => Promise<string | null>;
   botFetchMovements?: (url: string, token: string) => Promise<BotFetchResult | null>;
+  botFetchBalance?: (url: string, token: string) => Promise<BotFetchResult | null>;
 }
 
 declare global {

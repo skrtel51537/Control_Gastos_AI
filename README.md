@@ -14,6 +14,9 @@ servidor (la app solo *lee* del bot propio, nunca le envía datos).
   del mes en euros y en %, y **lista de movimientos** del mes (ordenable por último
   apuntado, fecha o importe, con buscador y filtros) para comprobar que está todo
   apuntado.
+- **Balances** (solo con el bot): quién debe cuánto a quién cada mes por los gastos
+  compartidos, con la lista de esos gastos (quién pagó cada uno, en su color) y el
+  resultado de cada mes. Ver [Cargar desde el bot](#cargar-desde-el-bot).
 - Desglose por categorías y evolución de tendencias.
 - Alertas de meses con gasto elevado (umbral configurable).
 - Objetivos de ahorro mensual (en € o en % de ingresos) con seguimiento por mes.
@@ -82,6 +85,12 @@ Campos opcionales que la app aprovecha si la API los envía en cada movimiento:
 como «Nuevo» lo de las últimas 24 h) y `shared_total` (gasto compartido: importe
 total, con `amount` como la parte propia). Sin ellos, «Últimos apuntados» usa el
 número del movimiento (`g-<n>`).
+
+La pestaña **Balances** pide `GET /api/balance` (mismo token, misma petición desde
+el proceso principal). El cálculo lo hace el bot, que ve los apuntes de las dos
+personas; la app solo valida la respuesta (`utils/balance.ts`) y la muestra. Cada
+mes se salda por separado. Si el bot aún no tiene esa ruta, la pestaña pide
+actualizarlo.
 
 ## Compilar el instalador (Windows)
 
