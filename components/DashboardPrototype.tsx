@@ -20,6 +20,7 @@ const CategoriesTab = lazy(() => import('./tabs/CategoriesTab').then((m) => ({ d
 const TrendsTab = lazy(() => import('./tabs/TrendsTab').then((m) => ({ default: m.TrendsTab })));
 const ComparatorTab = lazy(() => import('./tabs/ComparatorTab').then((m) => ({ default: m.ComparatorTab })));
 const GoalsTab = lazy(() => import('./tabs/GoalsTab').then((m) => ({ default: m.GoalsTab })));
+const BalancesTab = lazy(() => import('./tabs/BalancesTab').then((m) => ({ default: m.BalancesTab })));
 
 const DATA_KEY = 'finance_data_v3';
 const SETTINGS_KEY = 'finance_settings_v1';
@@ -333,6 +334,7 @@ export const DashboardPrototype: React.FC = () => {
         onExport={exportBackup}
         onRestore={restoreBackup}
         onAbout={() => setShowAbout(true)}
+        showBalances={botAvailable}
         bot={botAvailable ? {
           onLoad: handleBotButton,
           onSettings: () => setShowBotSettings(true),
@@ -380,6 +382,7 @@ export const DashboardPrototype: React.FC = () => {
               {activeTab === 'TENDENCIAS' && <TrendsTab data={filteredData} />}
               {activeTab === 'COMPARAR' && <ComparatorTab data={rawData!} />}
               {activeTab === 'OBJETIVOS' && <GoalsTab data={filteredData} settings={settings} onChange={updateSettings} />}
+              {activeTab === 'BALANCES' && <BalancesTab botConfig={botConfig} onOpenBotSettings={() => setShowBotSettings(true)} />}
             </Suspense>
           </div>
         </div>
@@ -387,4 +390,4 @@ export const DashboardPrototype: React.FC = () => {
     </div>
   );
 };
-
+

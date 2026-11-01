@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 // Vive en electron/ porque lo usa el proceso principal; el test está aquí para
 // que no se empaquete con la app.
-import { fetchBotMovements, parseBotBaseUrl, BOT_MAX_BYTES } from '../electron/botClient.js';
+import { fetchBotMovements, fetchBotBalance, parseBotBaseUrl, BOT_MAX_BYTES } from '../electron/botClient.js';
 
 const TOKEN = 'token-de-prueba';
 
@@ -43,7 +43,7 @@ describe('fetchBotMovements', () => {
     [403, 'unauthorized'],
     [500, 'server'],
     [503, 'server'],
-    [404, 'invalid'],
+    [404, 'not-found'],
   ])('HTTP %i → %s', async (status, error) => {
     const fetchImpl = fakeFetch(async () => jsonResponse(status, { error: 'x' }));
     expect(await fetchBotMovements('http://127.0.0.1:8765', TOKEN, { fetchImpl })).toEqual({ ok: false, error });
@@ -81,5 +81,22 @@ describe('fetchBotMovements', () => {
     expect(await fetchBotMovements('http://127.0.0.1:8765', '', { fetchImpl })).toEqual({ ok: false, error: 'unauthorized' });
     expect(await fetchBotMovements('http://127.0.0.1:8765', 'con\nsalto', { fetchImpl })).toEqual({ ok: false, error: 'unauthorized' });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchBotBalance', () => {
+  it('pide /api/balance con el token en la cabecera', async () => {
+    const fetchImpl = fakeFetch(async () => jsonResponse(200, { meses: [] }));
+    const result = await fetchBotBalance('http://127.0.0.1:8765', TOKEN, { fetchImpl });
+    expect(result).toEqual({ ok: true, body: { meses: [] } });
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe('http://127.0.0.1:8765/api/balance');
+    expect((init!.headers as Record<string, string>).Authorization).toBe(`Bearer ${TOKEN}`);
+    expect(init!.redirect).toBe('error');
+  });
+
+  it('traduce los mismos errores que los movimientos', async () => {
+    const fetchImpl = fakeFetch(async () => jsonResponse(401, { error: 'x' }));
+    expect(await fetchBotBalance('http://127.0.0.1:8765', TOKEN, { fetchImpl })).toEqual({ ok: false, error: 'unauthorized' });
   });
 });

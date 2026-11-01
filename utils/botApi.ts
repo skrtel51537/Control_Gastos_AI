@@ -32,6 +32,7 @@ const MESSAGES: Record<BotLoadErrorKind, string> = {
   timeout: 'El bot no ha respondido a tiempo. Comprueba que el ordenador donde funciona está encendido.',
   unauthorized: 'Token incorrecto. Comprueba en «Conexión con el bot» que lo has copiado entero.',
   server: 'El bot no pudo leer los datos. Revisa la ventana del bot.',
+  'not-found': 'El bot no tiene esta función todavía. Actualízalo y reinícialo.',
   invalid: 'La respuesta no parece venir del bot. Revisa la dirección en «Conexión con el bot».',
   'too-large': 'La respuesta del bot es demasiado grande y se ha descartado.',
   'bad-url': 'La dirección del bot no es válida. Debe empezar por http:// o https://.',

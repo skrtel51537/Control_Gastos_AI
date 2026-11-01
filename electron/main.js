@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, safeStorage } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
-import { fetchBotMovements } from './botClient.js';
+import { fetchBotMovements, fetchBotBalance } from './botClient.js';
 
 const require = createRequire(import.meta.url);
 const { autoUpdater } = require('electron-updater');
@@ -242,5 +242,12 @@ ipcMain.handle('bot-fetch-movements', async (event, url, token) => {
     if (!isTrustedSender(event)) return null;
     const result = await fetchBotMovements(url, token);
     if (!result.ok) log.warn(`Bot: no se han podido cargar los movimientos (${result.error}).`);
+    return result;
+});
+
+ipcMain.handle('bot-fetch-balance', async (event, url, token) => {
+    if (!isTrustedSender(event)) return null;
+    const result = await fetchBotBalance(url, token);
+    if (!result.ok) log.warn(`Bot: no se ha podido cargar el balance (${result.error}).`);
     return result;
 });

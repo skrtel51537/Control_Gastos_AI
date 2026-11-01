@@ -1,13 +1,15 @@
 import React from 'react';
 import type { Tab } from '../../types';
 
-export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore, onAbout, bot }: {
+export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore, onAbout, showBalances, bot }: {
   activeTab: Tab,
   onTabChange: (t: Tab) => void,
   onClear: () => void,
   onExport: () => void,
   onRestore: (e: React.ChangeEvent<HTMLInputElement>) => void,
   onAbout: () => void,
+  // Balances de gastos compartidos: salen del bot, solo en la app de escritorio.
+  showBalances?: boolean,
   // Solo en la app de escritorio: cargar desde el bot y su configuración.
   bot?: { onLoad: () => void, onSettings: () => void, loading: boolean, isSource: boolean },
 }) => (
@@ -23,7 +25,8 @@ export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore, 
         { id: 'CATEGORIAS', label: 'Desglose Categorías', icon: '🏷️' },
         { id: 'TENDENCIAS', label: 'Tendencias', icon: '📈' },
         { id: 'COMPARAR', label: 'Comparador', icon: '⚖️' },
-        { id: 'OBJETIVOS', label: 'Objetivos y Presupuestos', icon: '🎯' }
+        { id: 'OBJETIVOS', label: 'Objetivos y Presupuestos', icon: '🎯' },
+        ...(showBalances ? [{ id: 'BALANCES', label: 'Balances', icon: '🤝' }] : []),
       ].map((item) => (
         <button key={item.id} onClick={() => onTabChange(item.id as Tab)}
           title={item.label}
@@ -91,4 +94,4 @@ export const Sidebar = ({ activeTab, onTabChange, onClear, onExport, onRestore, 
     </div>
   </aside>
 );
-
+
