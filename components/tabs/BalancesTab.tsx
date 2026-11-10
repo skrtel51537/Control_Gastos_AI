@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { BotConfig } from '../../utils/botApi';
 import {
   BalanceData, BalanceMonth, Payer, SharedExpense, isSettled, loadBalanceFromBot, monthLabel,
+  pendingPayment, settleMonthInBot,
 } from '../../utils/balance';
 import { formatEuroCents } from '../../utils/format';
 import { Segmented } from '../ui/Segmented';
@@ -36,8 +37,13 @@ const Avatar = ({ who, name, size = 'md' }: { who: Payer, name: string, size?: '
   );
 };
 
+// "En paz" sin deuda o "Saldado" cuando había deuda y se ha pagado.
+const settledLabel = (month: BalanceMonth) => (month.settlements.length > 0 ? 'Saldado ✓' : 'Estáis en paz ✓');
+
 // Tarjeta principal: el resultado del mes y cuánto ha pagado cada uno.
-const SummaryCard = ({ month, me, partner }: { month: BalanceMonth, me: string, partner: string }) => {
+const SummaryCard = ({ month, me, partner, settling, onSettle }: {
+  month: BalanceMonth, me: string, partner: string, settling: boolean, onSettle: () => void,
+}) => {
   const settled = isSettled(month.balance);
   const creditor: Payer = month.balance > 0 ? 'me' : 'partner';
   const total = month.paidByMe + month.paidByPartner;
@@ -66,7 +72,7 @@ const SummaryCard = ({ month, me, partner }: { month: BalanceMonth, me: string, 
         <div className="text-center sm:text-left flex-1">
           <p className="text-sm text-slate-400">Balance de {monthLabel(month.month)}</p>
           {settled ? (
-            <p className="text-3xl font-bold text-emerald-400 mt-1">Estáis en paz ✓</p>
+            <p className="text-3xl font-bold text-emerald-400 mt-1">{settledLabel(month)}</p>
           ) : (
             <>
               <p className="text-lg text-slate-200 mt-1">
@@ -78,7 +84,40 @@ const SummaryCard = ({ month, me, partner }: { month: BalanceMonth, me: string, 
             </>
           )}
         </div>
+
+        {!settled && (
+          <button
+            type="button"
+            onClick={onSettle}
+            disabled={settling}
+            className="shrink-0 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold shadow-lg shadow-emerald-900/30 disabled:opacity-50"
+          >
+            {settling ? 'Apuntando…' : `🤝 Saldar ${monthLabel(month.month)}`}
+          </button>
+        )}
       </div>
+
+      {/* Pagos apuntados para este mes (los gastos compartidos no se tocan). */}
+      {month.settlements.length > 0 && (
+        <ul className="relative mt-5 space-y-1.5">
+          {month.settlements.map((s) => (
+            <li key={s.id} className="flex items-center gap-2 text-sm bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+              <span aria-hidden="true">💸</span>
+              <span className="text-slate-300">
+                {capitalize(shortDate(s.date))} · {s.paidBy === 'me'
+                  ? <>pagaste a <span className={PERSON.partner.text}>{partner}</span></>
+                  : <><span className={PERSON.partner.text}>{partner}</span> te pagó</>}
+              </span>
+              <span className="ml-auto font-mono font-semibold text-emerald-300">{formatEuroCents(s.amount)}</span>
+            </li>
+          ))}
+          {!settled && (
+            <li className="text-xs text-slate-500 px-1">
+              Después del pago se han apuntado más gastos de este mes: queda pendiente lo nuevo.
+            </li>
+          )}
+        </ul>
+      )}
 
       <div className="relative mt-6">
         <div className="flex justify-between text-xs mb-1.5">
@@ -203,7 +242,7 @@ const History = ({ months, selected, onSelect, partner }: {
                 <span className={`${PERSON.partner.bg} flex-1`} />
               </span>
               <span className={`text-sm font-mono text-right w-44 shrink-0 ${settled ? 'text-emerald-400' : m.balance > 0 ? PERSON.me.text : PERSON.partner.text}`}>
-                {settled ? 'En paz' : m.balance > 0 ? `${partner} te debe ${formatEuroCents(m.balance)}` : `Debes ${formatEuroCents(-m.balance)}`}
+                {settled ? (m.settlements.length > 0 ? 'Saldado ✓' : 'En paz') : m.balance > 0 ? `${partner} te debe ${formatEuroCents(m.balance)}` : `Debes ${formatEuroCents(-m.balance)}`}
               </span>
             </button>
           </li>
@@ -252,6 +291,41 @@ export const BalancesTab = ({ botConfig, onOpenBotSettings }: {
 
   const index = useMemo(() => data?.months.findIndex((m) => m.month === selected) ?? -1, [data, selected]);
   const month = data && index >= 0 ? data.months[index] : null;
+
+  const [settling, setSettling] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  useEffect(() => setNotice(null), [selected]);
+
+  // Saldar el mes abierto: se pide confirmación con la frase exacta y el bot
+  // apunta el pago (calcula él el importe y avisa a la otra persona).
+  const settle = async () => {
+    if (!botConfig || !data?.partner || !month) return;
+    const pending = pendingPayment(month);
+    if (!pending) return;
+    const amount = formatEuroCents(pending.amount);
+    const label = monthLabel(month.month);
+    const sentence = pending.payer === 'me'
+      ? `Vas a registrar que has pagado ${amount} a ${data.partner} por ${label}.`
+      : `Vas a registrar que ${data.partner} te ha pagado ${amount} por ${label}.`;
+    const ok = window.confirm(
+      `${sentence}\n\nEl balance de ese mes quedará a 0. Los gastos compartidos no se borran ` +
+      `y ${data.partner} recibirá un aviso en Telegram (desde allí se puede anular).\n\n¿Continuar?`,
+    );
+    if (!ok) return;
+
+    setSettling(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await settleMonthInBot(botConfig, month.month);
+      setData((prev) => prev && { ...prev, months: prev.months.map((m) => (m.month === result.month.month ? result.month : m)) });
+      setNotice(`Pago apuntado: ${formatEuroCents(result.settlement.amount)} por ${label}. ${data.partner} recibirá el aviso en Telegram.`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se ha podido apuntar el pago.');
+    } finally {
+      setSettling(false);
+    }
+  };
 
   if (!botConfig) {
     return (
@@ -331,9 +405,15 @@ export const BalancesTab = ({ botConfig, onOpenBotSettings }: {
         </div>
       )}
 
+      {notice && (
+        <div role="status" className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-300 text-sm">
+          ✓ {notice}
+        </div>
+      )}
+
       {month ? (
         <>
-          <SummaryCard month={month} me={data.user} partner={partner} />
+          <SummaryCard month={month} me={data.user} partner={partner} settling={settling} onSettle={settle} />
           <ExpenseList month={month} me={data.user} partner={partner} />
           {data.months.length > 1 && <History months={data.months} selected={month.month} onSelect={setSelected} partner={partner} />}
         </>

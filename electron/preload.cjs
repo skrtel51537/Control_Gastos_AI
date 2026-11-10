@@ -26,4 +26,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Movimientos del bot de gastos (la petición la hace el proceso principal)
     botFetchMovements: (url, token) => ipcRenderer.invoke('bot-fetch-movements', url, token),
     botFetchBalance: (url, token) => ipcRenderer.invoke('bot-fetch-balance', url, token),
+    botSettleMonth: (url, token, month) => ipcRenderer.invoke('bot-settle-month', url, token, month),
 });

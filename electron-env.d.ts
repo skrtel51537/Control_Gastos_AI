@@ -18,7 +18,9 @@ export interface AppInfo {
 }
 
 // Resultado de pedir los movimientos o el balance al bot (electron/botClient.js).
-export type BotErrorKind = 'bad-url' | 'unauthorized' | 'offline' | 'timeout' | 'server' | 'not-found' | 'invalid' | 'too-large';
+// 'already-settled' y 'rejected' solo aparecen al saldar un mes.
+export type BotErrorKind = 'bad-url' | 'unauthorized' | 'offline' | 'timeout' | 'server' | 'not-found' | 'invalid' | 'too-large'
+  | 'already-settled' | 'rejected';
 export type BotFetchResult = { ok: true; body: unknown } | { ok: false; error: BotErrorKind };
 
 export interface ElectronAPI {
@@ -33,6 +35,7 @@ export interface ElectronAPI {
   decrypt?: (b64: string) => Promise<string | null>;
   botFetchMovements?: (url: string, token: string) => Promise<BotFetchResult | null>;
   botFetchBalance?: (url: string, token: string) => Promise<BotFetchResult | null>;
+  botSettleMonth?: (url: string, token: string, month: string) => Promise<BotFetchResult | null>;
 }
 
 declare global {

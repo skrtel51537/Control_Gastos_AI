@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, safeStorage } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
-import { fetchBotMovements, fetchBotBalance } from './botClient.js';
+import { fetchBotMovements, fetchBotBalance, settleBotMonth } from './botClient.js';
 
 const require = createRequire(import.meta.url);
 const { autoUpdater } = require('electron-updater');
@@ -249,5 +249,15 @@ ipcMain.handle('bot-fetch-balance', async (event, url, token) => {
     if (!isTrustedSender(event)) return null;
     const result = await fetchBotBalance(url, token);
     if (!result.ok) log.warn(`Bot: no se ha podido cargar el balance (${result.error}).`);
+    return result;
+});
+
+// Saldar un mes: la única petición que escribe en el bot. La ventana solo
+// elige el mes (se valida en botClient.js); el importe lo calcula el bot.
+ipcMain.handle('bot-settle-month', async (event, url, token, month) => {
+    if (!isTrustedSender(event)) return null;
+    const result = await settleBotMonth(url, token, month);
+    if (result.ok) log.info(`Bot: pago apuntado para ${month}.`);
+    else log.warn(`Bot: no se ha podido saldar ${typeof month === 'string' ? month.slice(0, 7) : '?'} (${result.error}).`);
     return result;
 });

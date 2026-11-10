@@ -1,5 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mapBalanceResponse, loadBalanceFromBot, monthLabel, isSettled, displayName } from './balance';
+import {
+  mapBalanceResponse, loadBalanceFromBot, monthLabel, isSettled, displayName,
+  mapSettleResponse, settleMonthInBot, pendingPayment,
+} from './balance';
 
 const item = (id: string, date: string, paidBy: 'me' | 'partner', total: number, extra: Record<string, unknown> = {}) => ({
   id, date, concept: 'cine', total, paid_by: paidBy,
@@ -85,6 +88,106 @@ describe('loadBalanceFromBot', () => {
   it('sin Electron indica que no está disponible', async () => {
     vi.stubGlobal('window', {});
     await expect(loadBalanceFromBot({ url: 'http://x', token: 't' })).rejects.toMatchObject({ kind: 'unavailable' });
+  });
+});
+
+describe('pagos (saldar)', () => {
+  const settlement = (id: string, date: string, paidBy: 'me' | 'partner', amount: number) => ({ id, date, paid_by: paidBy, amount });
+
+  it('lee los pagos y el saldo antes de pagar', () => {
+    const data = mapBalanceResponse(response([
+      month('2026-10', [item('g-1', '2026-10-05', 'partner', 40.5)], {
+        paid_by_partner: 40.5, balance: 0, shared_balance: -20.25,
+        settlements: [settlement('l-1', '2026-11-03', 'me', 20.25)],
+      }),
+    ]));
+    const m = data.months[0];
+    expect(m.balance).toBe(0);
+    expect(m.sharedBalance).toBe(-20.25);
+    // El pago se apunta en noviembre pero salda octubre.
+    expect(m.settlements).toEqual([{ id: 'l-1', date: '2026-11-03', paidBy: 'me', amount: 20.25 }]);
+    expect(data.skipped).toBe(0);
+  });
+
+  it('un bot sin /saldar (sin pagos ni shared_balance) sigue funcionando', () => {
+    const data = mapBalanceResponse(response([month('2026-10', [], { balance: 12 })]));
+    expect(data.months[0].settlements).toEqual([]);
+    expect(data.months[0].sharedBalance).toBe(12);
+  });
+
+  it('descarta pagos mal formados o repetidos y los cuenta', () => {
+    const data = mapBalanceResponse(response([
+      month('2026-10', [], {
+        settlements: [
+          settlement('l-1', '2026-11-03', 'me', 5),
+          settlement('l-1', '2026-11-03', 'me', 5), // repetido
+          settlement('l-2', '2026-11-31', 'me', 5), // fecha imposible
+          settlement('l-3', '2026-11-03', 'yo' as never, 5), // quién pagó desconocido
+          settlement('l-4', '2026-11-03', 'me', 0), // importe cero
+          settlement('l-5', '2026-11-03', 'me', -5), // negativo
+        ],
+      }),
+    ]));
+    expect(data.months[0].settlements.map((s) => s.id)).toEqual(['l-1']);
+    expect(data.skipped).toBe(5);
+  });
+
+  it('pendingPayment dice quién paga a quién', () => {
+    const base = mapBalanceResponse(response([month('2026-10', [], { balance: -20.25 }), month('2026-11', [], { balance: 7 })]));
+    expect(pendingPayment(base.months[0])).toEqual({ payer: 'me', amount: 20.25 });
+    expect(pendingPayment(base.months[1])).toEqual({ payer: 'partner', amount: 7 });
+    const paz = mapBalanceResponse(response([month('2026-10', [], { balance: 0.001 })]));
+    expect(pendingPayment(paz.months[0])).toBeNull();
+  });
+
+  it('mapSettleResponse devuelve el pago y el mes actualizado', () => {
+    const body = {
+      settlement: settlement('l-9', '2026-11-10', 'partner', 7),
+      month: month('2026-11', [], { balance: 0, shared_balance: 7, settlements: [settlement('l-9', '2026-11-10', 'partner', 7)] }),
+    };
+    const r = mapSettleResponse(body, '2026-11');
+    expect(r.settlement).toEqual({ id: 'l-9', date: '2026-11-10', paidBy: 'partner', amount: 7 });
+    expect(r.month.balance).toBe(0);
+    // Respuesta de otro mes o mal formada: no se acepta.
+    expect(() => mapSettleResponse(body, '2026-10')).toThrow();
+    expect(() => mapSettleResponse({ settlement: null, month: body.month }, '2026-11')).toThrow();
+  });
+});
+
+describe('settleMonthInBot', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const ok = {
+    ok: true,
+    body: {
+      settlement: { id: 'l-1', date: '2026-11-10', paid_by: 'me', amount: 20.25 },
+      month: month('2026-10', [], { balance: 0, settlements: [{ id: 'l-1', date: '2026-11-10', paid_by: 'me', amount: 20.25 }] }),
+    },
+  };
+
+  it('envía solo la URL, el token y el mes (nunca un importe)', async () => {
+    const botSettleMonth = vi.fn(async () => ok);
+    vi.stubGlobal('window', { electronAPI: { botSettleMonth } });
+    const r = await settleMonthInBot({ url: 'http://127.0.0.1:8765', token: 'secreto' }, '2026-10');
+    expect(botSettleMonth).toHaveBeenCalledWith('http://127.0.0.1:8765', 'secreto', '2026-10');
+    expect(r.settlement.amount).toBe(20.25);
+  });
+
+  it('no llama al bot con un mes inválido', async () => {
+    const botSettleMonth = vi.fn(async () => ok);
+    vi.stubGlobal('window', { electronAPI: { botSettleMonth } });
+    await expect(settleMonthInBot({ url: 'http://x', token: 't' }, 'octubre')).rejects.toMatchObject({ kind: 'rejected' });
+    expect(botSettleMonth).not.toHaveBeenCalled();
+  });
+
+  it('un mes que ya está en paz da un mensaje claro', async () => {
+    vi.stubGlobal('window', { electronAPI: { botSettleMonth: async () => ({ ok: false, error: 'already-settled' }) } });
+    await expect(settleMonthInBot({ url: 'http://x', token: 't' }, '2026-10')).rejects.toThrow(/ya está en paz/);
+  });
+
+  it('sin Electron indica que no está disponible', async () => {
+    vi.stubGlobal('window', {});
+    await expect(settleMonthInBot({ url: 'http://x', token: 't' }, '2026-10')).rejects.toMatchObject({ kind: 'unavailable' });
   });
 });
 
