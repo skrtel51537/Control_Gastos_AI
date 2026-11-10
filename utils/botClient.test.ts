@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 // Vive en electron/ porque lo usa el proceso principal; el test está aquí para
 // que no se empaquete con la app.
-import { fetchBotMovements, fetchBotBalance, parseBotBaseUrl, BOT_MAX_BYTES } from '../electron/botClient.js';
+import { fetchBotMovements, fetchBotBalance, settleBotMonth, parseBotBaseUrl, BOT_MAX_BYTES } from '../electron/botClient.js';
 
 const TOKEN = 'token-de-prueba';
 
@@ -98,5 +98,48 @@ describe('fetchBotBalance', () => {
   it('traduce los mismos errores que los movimientos', async () => {
     const fetchImpl = fakeFetch(async () => jsonResponse(401, { error: 'x' }));
     expect(await fetchBotBalance('http://127.0.0.1:8765', TOKEN, { fetchImpl })).toEqual({ ok: false, error: 'unauthorized' });
+  });
+});
+
+describe('settleBotMonth', () => {
+  it('hace POST con el mes en JSON, el token en la cabecera y sin seguir redirecciones', async () => {
+    const fetchImpl = fakeFetch(async () => jsonResponse(201, { settlement: {}, month: {} }));
+    const result = await settleBotMonth('http://127.0.0.1:8765', TOKEN, '2026-10', { fetchImpl });
+
+    expect(result).toEqual({ ok: true, body: { settlement: {}, month: {} } });
+    const [url, init] = fetchImpl.mock.calls[0];
+    expect(url).toBe('http://127.0.0.1:8765/api/liquidaciones');
+    expect(url).not.toContain(TOKEN);
+    expect(init!.method).toBe('POST');
+    expect(JSON.parse(init!.body as string)).toEqual({ month: '2026-10' }); // nunca un importe
+    const headers = init!.headers as Record<string, string>;
+    expect(headers.Authorization).toBe(`Bearer ${TOKEN}`);
+    expect(headers['Content-Type']).toBe('application/json');
+    expect(init!.redirect).toBe('error');
+  });
+
+  it.each([
+    [409, 'already-settled'],
+    [400, 'rejected'],
+    [401, 'unauthorized'],
+    [404, 'not-found'],
+    [500, 'server'],
+    [200, 'invalid'], // al saldar solo vale 201
+  ])('HTTP %i → %s', async (status, error) => {
+    const fetchImpl = fakeFetch(async () => jsonResponse(status, { error: 'x' }));
+    expect(await settleBotMonth('http://127.0.0.1:8765', TOKEN, '2026-10', { fetchImpl })).toEqual({ ok: false, error });
+  });
+
+  it.each(['octubre', '2026-13', '2026-1', '', null, '2026-10; DROP'])('no envía nada con el mes %s', async (month) => {
+    const fetchImpl = fakeFetch(async () => jsonResponse(201, {}));
+    expect(await settleBotMonth('http://127.0.0.1:8765', TOKEN, month as string, { fetchImpl })).toEqual({ ok: false, error: 'rejected' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('las lecturas siguen siendo GET', async () => {
+    const fetchImpl = fakeFetch(async () => jsonResponse(200, { meses: [] }));
+    await fetchBotBalance('http://127.0.0.1:8765', TOKEN, { fetchImpl });
+    expect(fetchImpl.mock.calls[0][1]!.method).toBe('GET');
+    expect(fetchImpl.mock.calls[0][1]!.body).toBeUndefined();
   });
 });

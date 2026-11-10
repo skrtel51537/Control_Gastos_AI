@@ -1,5 +1,6 @@
-// Cliente de la API de solo lectura del bot de gastos (GET /api/movimientos y
-// GET /api/balance).
+// Cliente de la API del bot de gastos: GET /api/movimientos y GET /api/balance
+// (lectura) y POST /api/liquidaciones (apuntar el pago de un mes; el importe lo
+// calcula el bot, la app solo envía el mes).
 //
 // Se ejecuta en el proceso principal. El token va solo en la cabecera
 // Authorization: nunca en la URL ni en los logs. No depende de Electron para
@@ -55,19 +56,25 @@ const readLimited = async (res, max) => {
 const isTimeout = (error) => error?.name === 'TimeoutError';
 
 // Resultado: { ok: true, body } o { ok: false, error } con error en
-// 'bad-url' | 'unauthorized' | 'offline' | 'timeout' | 'server' | 'not-found' | 'invalid' | 'too-large'.
+// 'bad-url' | 'unauthorized' | 'offline' | 'timeout' | 'server' | 'not-found' | 'invalid' | 'too-large'
+// y, solo al saldar, 'already-settled' (409) | 'rejected' (400).
 // `path` es siempre una ruta fija de este archivo, nunca algo que venga de la ventana.
-const fetchBot = async (path, rawUrl, token, { fetchImpl = fetch, timeoutMs = BOT_TIMEOUT_MS } = {}) => {
+const fetchBot = async (path, rawUrl, token, { fetchImpl = fetch, timeoutMs = BOT_TIMEOUT_MS, json } = {}) => {
     const base = parseBotBaseUrl(rawUrl);
     if (!base) return { ok: false, error: 'bad-url' };
     if (!isValidToken(token)) return { ok: false, error: 'unauthorized' };
+
+    const isPost = json !== undefined;
+    const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
+    if (isPost) headers['Content-Type'] = 'application/json';
 
     const signal = AbortSignal.timeout(timeoutMs);
     let res;
     try {
         res = await fetchImpl(new URL(path, base).toString(), {
-            method: 'GET',
-            headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+            method: isPost ? 'POST' : 'GET',
+            headers,
+            body: isPost ? JSON.stringify(json) : undefined,
             // No seguir redirecciones: el token no debe acabar en otro servidor.
             redirect: 'error',
             cache: 'no-store',
@@ -81,7 +88,9 @@ const fetchBot = async (path, rawUrl, token, { fetchImpl = fetch, timeoutMs = BO
     if (res.status >= 500) return { ok: false, error: 'server' };
     // Un bot sin actualizar todavía no tiene la ruta pedida.
     if (res.status === 404) return { ok: false, error: 'not-found' };
-    if (res.status !== 200) return { ok: false, error: 'invalid' };
+    if (isPost && res.status === 409) return { ok: false, error: 'already-settled' };
+    if (isPost && res.status === 400) return { ok: false, error: 'rejected' };
+    if (res.status !== (isPost ? 201 : 200)) return { ok: false, error: 'invalid' };
 
     let text;
     try {
@@ -102,3 +111,13 @@ export const fetchBotMovements = (rawUrl, token, options) => fetchBot('api/movim
 
 // Balance mensual de los gastos compartidos (mismo token y mismas comprobaciones).
 export const fetchBotBalance = (rawUrl, token, options) => fetchBot('api/balance', rawUrl, token, options);
+
+// Mes con el formato AAAA-MM (el único dato que la ventana puede elegir al saldar).
+export const isValidMonth = (month) => typeof month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(month);
+
+// Apunta en el bot que se ha pagado lo pendiente de `month`. El importe lo
+// calcula el bot en ese momento: la app nunca lo envía.
+export const settleBotMonth = (rawUrl, token, month, options) => {
+    if (!isValidMonth(month)) return Promise.resolve({ ok: false, error: 'rejected' });
+    return fetchBot('api/liquidaciones', rawUrl, token, { ...options, json: { month } });
+};

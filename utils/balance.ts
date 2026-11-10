@@ -20,12 +20,22 @@ export interface SharedExpense {
   otherHalfAdded: boolean; // quien no pagó ya añadió su mitad a sus gastos
 }
 
+// Pago de lo pendiente de un mes («saldar»), apuntado en el bot.
+export interface Settlement {
+  id: string;
+  date: string; // AAAA-MM-DD, el día en que se apuntó (puede ser del mes siguiente)
+  paidBy: Payer;
+  amount: number; // euros, positivo
+}
+
 export interface BalanceMonth {
   month: string; // AAAA-MM
   paidByMe: number;
   paidByPartner: number;
-  balance: number; // positivo: la pareja te debe; negativo: tú le debes
+  balance: number; // neto, después de los pagos. Positivo: la pareja te debe; negativo: tú le debes
+  sharedBalance: number; // solo los gastos, antes de los pagos (= balance si el bot no lo envía)
   items: SharedExpense[];
+  settlements: Settlement[]; // del más antiguo al más reciente
 }
 
 export interface BalanceData {
@@ -77,6 +87,61 @@ const toItem = (raw: unknown): SharedExpense | null => {
   };
 };
 
+const toSettlement = (raw: unknown): Settlement | null => {
+  if (!isPlainObject(raw)) return null;
+  const id = text(raw.id, 100);
+  const amount = euros(raw.amount);
+  if (!id || !isIsoDay(raw.date) || amount === null || amount === 0) return null;
+  if (raw.paid_by !== 'me' && raw.paid_by !== 'partner') return null;
+  return { id, date: raw.date, paidBy: raw.paid_by, amount };
+};
+
+const finite = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+// Un mes de la respuesta del bot. Devuelve null si el mes en sí no es válido;
+// los gastos o pagos sueltos con formato incorrecto se descartan y se cuentan.
+const toMonth = (raw: unknown): { month: BalanceMonth, skipped: number } | null => {
+  if (!isPlainObject(raw)) return null;
+  const paidByMe = euros(raw.paid_by_me);
+  const paidByPartner = euros(raw.paid_by_partner);
+  const balance = finite(raw.balance);
+  if (!isMonth(raw.month) || paidByMe === null || paidByPartner === null || balance === null || !Array.isArray(raw.items)) {
+    return null;
+  }
+
+  let skipped = 0;
+  const seen = new Set<string>();
+  const items: SharedExpense[] = [];
+  for (const rawItem of raw.items) {
+    const item = toItem(rawItem);
+    if (!item || seen.has(item.id)) {
+      skipped++;
+      continue;
+    }
+    seen.add(item.id);
+    items.push(item);
+  }
+  // Más reciente primero, como la lista de movimientos.
+  items.sort((a, b) => b.date.localeCompare(a.date));
+
+  // `settlements` y `shared_balance` son opcionales: un bot sin /saldar no los envía.
+  const settlements: Settlement[] = [];
+  const seenSettlements = new Set<string>();
+  for (const rawSettlement of Array.isArray(raw.settlements) ? raw.settlements : []) {
+    const s = toSettlement(rawSettlement);
+    if (!s || seenSettlements.has(s.id)) {
+      skipped++;
+      continue;
+    }
+    seenSettlements.add(s.id);
+    settlements.push(s);
+  }
+  settlements.sort((a, b) => a.date.localeCompare(b.date));
+
+  const sharedBalance = finite(raw.shared_balance) ?? balance;
+  return { month: { month: raw.month, paidByMe, paidByPartner, balance, sharedBalance, items, settlements }, skipped };
+};
+
 // Convierte la respuesta de GET /api/balance. Lanza BotLoadError si no tiene la forma esperada.
 export const mapBalanceResponse = (body: unknown): BalanceData => {
   if (!isPlainObject(body) || !Array.isArray(body.meses)) throw new BotLoadError('invalid');
@@ -85,30 +150,14 @@ export const mapBalanceResponse = (body: unknown): BalanceData => {
   const seenMonths = new Set<string>();
   const months: BalanceMonth[] = [];
   for (const raw of body.meses) {
-    const paidByMe = isPlainObject(raw) ? euros(raw.paid_by_me) : null;
-    const paidByPartner = isPlainObject(raw) ? euros(raw.paid_by_partner) : null;
-    const balance = isPlainObject(raw) && typeof raw.balance === 'number' && Number.isFinite(raw.balance) ? raw.balance : null;
-    if (!isPlainObject(raw) || !isMonth(raw.month) || seenMonths.has(raw.month)
-      || paidByMe === null || paidByPartner === null || balance === null || !Array.isArray(raw.items)) {
+    const parsed = toMonth(raw);
+    if (!parsed || seenMonths.has(parsed.month.month)) {
       skipped++;
       continue;
     }
-    seenMonths.add(raw.month);
-
-    const seen = new Set<string>();
-    const items: SharedExpense[] = [];
-    for (const rawItem of raw.items) {
-      const item = toItem(rawItem);
-      if (!item || seen.has(item.id)) {
-        skipped++;
-        continue;
-      }
-      seen.add(item.id);
-      items.push(item);
-    }
-    // Más reciente primero, como la lista de movimientos.
-    items.sort((a, b) => b.date.localeCompare(a.date));
-    months.push({ month: raw.month, paidByMe, paidByPartner, balance, items });
+    seenMonths.add(parsed.month.month);
+    skipped += parsed.skipped;
+    months.push(parsed.month);
   }
   months.sort((a, b) => a.month.localeCompare(b.month));
 
@@ -128,6 +177,31 @@ export const loadBalanceFromBot = async (config: BotConfig): Promise<BalanceData
   if (!result.ok) throw new BotLoadError(result.error);
   return mapBalanceResponse(result.body);
 };
+
+// Respuesta de POST /api/liquidaciones: el pago apuntado y el mes ya actualizado.
+export const mapSettleResponse = (body: unknown, expectedMonth: string): { settlement: Settlement, month: BalanceMonth } => {
+  if (!isPlainObject(body)) throw new BotLoadError('invalid');
+  const settlement = toSettlement(body.settlement);
+  const parsed = toMonth(body.month);
+  if (!settlement || !parsed || parsed.month.month !== expectedMonth) throw new BotLoadError('invalid');
+  return { settlement, month: parsed.month };
+};
+
+// Apunta en el bot que se ha pagado lo pendiente de `month` (AAAA-MM). El
+// importe lo calcula el bot; el bot avisa a la otra persona por Telegram.
+export const settleMonthInBot = async (config: BotConfig, month: string) => {
+  if (!isMonth(month)) throw new BotLoadError('rejected');
+  const settle = typeof window !== 'undefined' ? window.electronAPI?.botSettleMonth : undefined;
+  if (!settle) throw new BotLoadError('unavailable');
+  const result = await settle(config.url, config.token, month);
+  if (!result) throw new BotLoadError('unavailable');
+  if (!result.ok) throw new BotLoadError(result.error);
+  return mapSettleResponse(result.body, month);
+};
+
+// Lo que debe quien debe en un mes: quién paga a quién y cuánto (null si están en paz).
+export const pendingPayment = (month: BalanceMonth): { payer: Payer, amount: number } | null =>
+  isSettled(month.balance) ? null : { payer: month.balance > 0 ? 'partner' : 'me', amount: Math.abs(month.balance) };
 
 // "2026-10" → "octubre 2026".
 export const monthLabel = (month: string): string => {

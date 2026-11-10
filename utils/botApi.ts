@@ -38,6 +38,8 @@ const MESSAGES: Record<BotLoadErrorKind, string> = {
   'bad-url': 'La dirección del bot no es válida. Debe empezar por http:// o https://.',
   unavailable: 'Cargar desde el bot solo está disponible en la aplicación de escritorio.',
   empty: 'El bot no tiene ningún movimiento guardado para tu usuario.',
+  'already-settled': 'Ese mes ya está en paz: no había nada pendiente que saldar.',
+  rejected: 'El bot no ha aceptado el pago de ese mes. Actualiza el balance y vuelve a intentarlo.',
 };
 
 export class BotLoadError extends Error {
